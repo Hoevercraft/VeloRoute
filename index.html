@@ -3,60 +3,711 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VeloRoute</title>
-
-<link rel="manifest" href="manifest.json">
-
-<meta name="theme-color" content="#0c1220">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="VeloRoute">
-
+<title>VeloRoute — Fahrradrouten Planer</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
-body{
-    margin:0;
-    background:#0c1220;
-    color:white;
-    font-family:Arial,sans-serif;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    height:100vh;
-    text-align:center;
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0c1220;--panel:#111827;--card:#1a2336;--border:#253048;
+  --accent:#22c55e;--accent-dim:rgba(34,197,94,.14);
+  --warm:#f59e0b;--warm-dim:rgba(245,158,11,.12);
+  --blue:#3b82f6;--blue-dim:rgba(59,130,246,.13);
+  --orange:#f97316;--orange-dim:rgba(249,115,22,.13);
+  --text:#e2e8f0;--muted:#64748b;--danger:#ef4444;--r:10px;
 }
-.card{
-    max-width:500px;
-    padding:30px;
-}
-button{
-    background:#22c55e;
-    border:none;
-    color:black;
-    padding:16px 24px;
-    border-radius:12px;
-    font-size:18px;
-    cursor:pointer;
+html,body{height:100%}
+body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── HEADER ── */
+header{height:54px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:12px;flex-shrink:0;z-index:500}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:3px;color:var(--accent)}
+.logo em{color:var(--text);font-style:normal}
+.hdivider{width:1px;height:22px;background:var(--border)}
+.api-zone{display:flex;align-items:center;gap:8px;margin-left:auto}
+.api-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background .3s;flex-shrink:0}
+.api-dot.ok{background:var(--accent)}.api-dot.err{background:var(--danger)}
+.api-lbl{font-size:11px;color:var(--muted);white-space:nowrap}
+.api-in{width:200px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:5px 10px;font-size:12px;font-family:'Courier New',monospace}
+.api-in:focus{outline:none;border-color:var(--accent)}
+.api-link{font-size:11px;color:var(--muted);text-decoration:none;white-space:nowrap;transition:color .2s}
+.api-link:hover{color:var(--accent)}
+
+/* ── LAYOUT ── */
+.main{display:flex;flex:1;overflow:hidden}
+
+/* ── SIDEBAR ── */
+.sidebar{width:296px;min-width:296px;background:var(--panel);border-right:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
+.sidebar::-webkit-scrollbar{width:3px}
+.sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.sb{padding:16px;border-bottom:1px solid var(--border)}
+.sb-lbl{font-size:10px;font-weight:600;letter-spacing:1.8px;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+
+/* Inputs */
+.row{display:flex;gap:6px}
+.txt{flex:1;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:var(--r);padding:9px 12px;font-family:inherit;font-size:13px;transition:border-color .2s}
+.txt:focus{outline:none;border-color:var(--accent)}
+.txt::placeholder{color:var(--muted)}
+.ico-btn{width:38px;height:38px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:var(--r);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;transition:all .2s;flex-shrink:0}
+.ico-btn:hover{border-color:var(--accent);color:var(--accent)}
+.pill{display:none;margin-top:8px;padding:7px 10px;background:var(--accent-dim);border:1px solid rgba(34,197,94,.25);border-radius:7px;font-size:12px;color:var(--accent);line-height:1.3}
+
+/* Bike cards */
+.bike-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.bike-card{padding:12px 8px;background:var(--card);border:2px solid var(--border);border-radius:var(--r);cursor:pointer;text-align:center;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:5px}
+.bc-icon{font-size:24px}
+.bc-title{font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1px;color:var(--muted)}
+.bc-sub{font-size:10px;color:var(--muted);line-height:1.3}
+.bike-card.ar{border-color:var(--blue);background:var(--blue-dim)}.bike-card.ar .bc-title{color:var(--blue)}
+.bike-card.ag{border-color:var(--orange);background:var(--orange-dim)}.bike-card.ag .bc-title{color:var(--orange)}
+
+/* Distance */
+.dist-top{display:flex;align-items:baseline;gap:6px;margin-bottom:10px}
+.dist-num{font-family:'Bebas Neue',sans-serif;font-size:52px;line-height:1;color:var(--accent)}
+.dist-unit{font-size:16px;color:var(--muted)}
+.dist-hint{font-size:11px;color:var(--muted);margin-left:auto;text-align:right;line-height:1.5}
+input[type=range]{-webkit-appearance:none;width:100%;height:4px;background:var(--border);border-radius:2px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;background:var(--accent);border-radius:50%;box-shadow:0 0 0 3px var(--accent-dim)}
+.range-lbl{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:5px}
+
+/* Toggle */
+.tog-row{display:flex;align-items:center;gap:10px}
+.tog-info{flex:1}
+.tog-title{font-size:13px;font-weight:500}
+.tog-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.tog{position:relative;width:42px;height:23px;flex-shrink:0}
+.tog input{opacity:0;width:0;height:0;position:absolute}
+.tog-track{position:absolute;inset:0;background:var(--border);border-radius:12px;cursor:pointer;transition:background .2s}
+.tog-track::after{content:'';position:absolute;width:17px;height:17px;top:3px;left:3px;background:#fff;border-radius:50%;transition:transform .2s}
+.tog input:checked+.tog-track{background:var(--warm)}
+.tog input:checked+.tog-track::after{transform:translateX(19px)}
+
+/* Generate btn */
+.gen-btn{width:100%;padding:13px;background:var(--accent);color:#000;border:none;border-radius:var(--r);font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:3px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s}
+.gen-btn:hover:not(:disabled){background:#16a34a;box-shadow:0 4px 20px rgba(34,197,94,.25);transform:translateY(-1px)}
+.gen-btn:disabled{background:var(--border);color:var(--muted);cursor:not-allowed}
+.spinner{width:18px;height:18px;border:2px solid rgba(0,0,0,.25);border-top-color:rgba(0,0,0,.7);border-radius:50%;animation:spin .7s linear infinite;display:none;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Error */
+.err{display:none;margin-top:8px;padding:9px 11px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:7px;font-size:12px;color:#fca5a5;line-height:1.4}
+.err.on{display:block}
+
+/* Results */
+.results{display:none}
+.results.on{display:block}
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
+.stat-box{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 5px;text-align:center}
+.sv{font-family:'Bebas Neue',sans-serif;font-size:19px;line-height:1}
+.sv.road{color:var(--blue)}.sv.gravel{color:var(--orange)}.sv.shade{color:var(--accent)}
+.sl{font-size:10px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.5px}
+.ele-wrap{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;display:none}
+.ele-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.shade-tag{display:none;align-items:center;gap:4px;padding:3px 9px;background:var(--warm-dim);border:1px solid rgba(245,158,11,.25);border-radius:20px;font-size:11px;color:var(--warm);margin-bottom:10px}
+.shade-tag.on{display:inline-flex}
+.acts{display:flex;flex-direction:column;gap:7px}
+.btn{display:flex;align-items:center;justify-content:center;gap:7px;padding:9px 14px;border-radius:8px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .2s;width:100%}
+.btn-g{background:var(--accent);color:#000}
+.btn-g:hover{background:#16a34a}
+.btn-2{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.btn-q{background:var(--card);color:var(--text);border:1px solid var(--border)}
+.btn-q:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ── MAP ── */
+.map-wrap{flex:1;position:relative;overflow:hidden}
+#map{width:100%;height:100%}
+.mover{position:absolute;z-index:1001}
+.tile-tog{top:12px;right:50px;background:rgba(17,24,39,.92);border:1px solid var(--border);border-radius:8px;padding:4px;display:flex;gap:2px;backdrop-filter:blur(8px)}
+.t-btn{padding:4px 10px;border-radius:5px;font-size:11px;font-weight:500;border:none;background:transparent;color:var(--muted);cursor:pointer;transition:all .15s}
+.t-btn.on{background:var(--accent);color:#000}
+.edit-bar{top:0;left:0;right:0;background:rgba(245,158,11,.97);color:#000;padding:10px 14px;display:none;align-items:center;gap:10px;font-size:13px;font-weight:500}
+.edit-bar.on{display:flex}
+.eb-txt{flex:1;font-size:12px}
+.sm-btn{padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;white-space:nowrap;transition:all .15s}
+.sm-dark{background:rgba(0,0,0,.2);color:#000}.sm-dark:hover{background:rgba(0,0,0,.35)}
+.sm-solid{background:#000;color:#fff}.sm-solid:hover{background:#1a1a1a}
+.hint-wrap{inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.hint-card{background:rgba(17,24,39,.9);border:1px solid var(--border);border-radius:14px;padding:18px 24px;text-align:center;font-size:14px;color:var(--muted);line-height:1.8;backdrop-filter:blur(8px)}
+.hint-card strong{color:var(--text)}
+.legend{bottom:30px;left:12px;background:rgba(17,24,39,.9);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:11px;display:none;backdrop-filter:blur(6px)}
+.legend.on{display:block}
+.leg-item{display:flex;align-items:center;gap:7px;margin-bottom:3px}
+.leg-item:last-child{margin-bottom:0}
+.leg-line{width:24px;height:3px;border-radius:2px}
+
+/* Leaflet theme */
+.leaflet-popup-content-wrapper{background:#1a2336;color:#e2e8f0;border:1px solid #253048;border-radius:10px}
+.leaflet-popup-tip{background:#1a2336}
+.leaflet-bar a{background:#1a2336!important;color:#e2e8f0!important;border-color:#253048!important}
+.leaflet-bar a:hover{background:#253048!important}
+
+/* Responsive */
+@media(max-width:768px){
+  .main{flex-direction:column}
+  .sidebar{width:100%;min-width:unset;max-height:44vh;border-right:none;border-bottom:1px solid var(--border)}
+  .api-in{width:130px}.api-lbl{display:none}
 }
 </style>
 </head>
 <body>
 
-<div class="card">
-<h1>🚴 VeloRoute</h1>
-<p>Deine iPhone Fahrrad-App ist bereit.</p>
+<header>
+  <div class="logo">Velo<em>Route</em></div>
+  <div class="hdivider"></div>
+  <span style="font-size:12px;color:var(--muted)">Fahrradrouten Planer</span>
+  <div class="api-zone">
+    <span class="api-dot" id="apiDot"></span>
+    <span class="api-lbl">ORS API Key</span>
+    <input type="password" class="api-in" id="apiIn" placeholder="dein kostenloser Key…" autocomplete="off">
+    <a href="https://openrouteservice.org/dev/#/login" target="_blank" class="api-link">→ Kostenlos holen</a>
+  </div>
+</header>
 
-<button onclick="openPlanner()">App starten</button>
+<div class="main">
+  <div class="sidebar">
+
+    <!-- Startpunkt -->
+    <div class="sb">
+      <div class="sb-lbl">Startpunkt</div>
+      <div class="row">
+        <input type="text" class="txt" id="locIn" placeholder="Ort, Adresse oder PLZ…">
+        <button class="ico-btn" id="geoBtn" title="Suchen">🔍</button>
+        <button class="ico-btn" id="gpsBtn" title="Meinen Standort">📍</button>
+      </div>
+      <div class="pill" id="locPill"></div>
+      <div class="err" id="locErr"></div>
+    </div>
+
+    <!-- Fahrradtyp -->
+    <div class="sb">
+      <div class="sb-lbl">Fahrradtyp</div>
+      <div class="bike-grid">
+        <div class="bike-card ar" id="cRoad" onclick="setBike('road')">
+          <div class="bc-icon">🚴</div>
+          <div class="bc-title">Rennrad</div>
+          <div class="bc-sub">Straßen &amp; befestigte Radwege</div>
+        </div>
+        <div class="bike-card" id="cGrav" onclick="setBike('gravel')">
+          <div class="bc-icon">🚵</div>
+          <div class="bc-title">Gravel</div>
+          <div class="bc-sub">Wald-, Schotter- &amp; Trails</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Distanz -->
+    <div class="sb">
+      <div class="sb-lbl">Zieldistanz</div>
+      <div class="dist-top">
+        <div class="dist-num" id="dNum">50</div>
+        <div class="dist-unit">km</div>
+        <div class="dist-hint">Rundkurs<br>ab Startpunkt</div>
+      </div>
+      <input type="range" id="dSlider" min="10" max="200" value="50" step="5">
+      <div class="range-lbl"><span>10</span><span>50</span><span>100</span><span>150</span><span>200 km</span></div>
+    </div>
+
+    <!-- Optionen -->
+    <div class="sb">
+      <div class="sb-lbl">Optionen</div>
+      <div class="tog-row">
+        <div class="tog-info">
+          <div class="tog-title">☀️ Heißer Tag</div>
+          <div class="tog-sub">Route wählt schattige Wald- &amp; Parkwege</div>
+        </div>
+        <label class="tog"><input type="checkbox" id="hotTog"><span class="tog-track"></span></label>
+      </div>
+    </div>
+
+    <!-- Generate -->
+    <div class="sb">
+      <button class="gen-btn" id="genBtn" onclick="planRoute()">
+        <div class="spinner" id="spin"></div>
+        <span id="genTxt">ROUTE PLANEN</span>
+      </button>
+      <div class="err" id="routeErr"></div>
+    </div>
+
+    <!-- Results -->
+    <div class="results sb" id="results">
+      <div class="sb-lbl">Deine Route</div>
+      <div class="shade-tag" id="shadeTag">🌿 Schattige Route aktiv</div>
+      <div class="stats-grid">
+        <div class="stat-box"><div class="sv" id="sD">—</div><div class="sl">Distanz</div></div>
+        <div class="stat-box"><div class="sv" id="sE">—</div><div class="sl">Höhenmeter</div></div>
+        <div class="stat-box"><div class="sv" id="sT">—</div><div class="sl">Zeit est.</div></div>
+      </div>
+      <div class="ele-wrap" id="eleWrap">
+        <div class="ele-lbl">Höhenprofil</div>
+        <div id="eleChart"></div>
+      </div>
+      <div class="acts">
+        <button class="btn btn-g" onclick="exportGPX()">⬇ Als GPX herunterladen</button>
+        <div class="btn-2">
+          <button class="btn btn-q" onclick="enterEdit()">✏️ Anpassen</button>
+          <button class="btn btn-q" onclick="newVariant()">🔀 Neue Route</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /sidebar -->
+
+  <div class="map-wrap">
+    <div id="map"></div>
+
+    <!-- Tile toggle -->
+    <div class="mover tile-tog">
+      <button class="t-btn on" id="tOsm" onclick="setTile('osm')">Karte</button>
+      <button class="t-btn" id="tTopo" onclick="setTile('topo')">Topo</button>
+    </div>
+
+    <!-- Edit bar -->
+    <div class="mover edit-bar" id="editBar">
+      <div class="eb-txt">✏️ <strong>Bearbeitungsmodus</strong> — Ziehe die Marker oder klicke auf die Karte für neue Wegpunkte. Doppelklick auf Marker entfernt ihn.</div>
+      <button class="sm-btn sm-solid" onclick="applyEdit()">✓ Aktualisieren</button>
+      <button class="sm-btn sm-dark" onclick="exitEdit()">✕ Abbrechen</button>
+    </div>
+
+    <!-- Hint -->
+    <div class="mover hint-wrap" id="hint">
+      <div class="hint-card">🗺️ Wähle einen <strong>Startpunkt</strong> und klicke auf<br><strong>Route Planen</strong> um deine Tour zu generieren</div>
+    </div>
+
+    <!-- Legend -->
+    <div class="mover legend" id="legend">
+      <div class="leg-item"><div class="leg-line" style="background:#22c55e"></div><span>Start</span></div>
+      <div class="leg-item" id="legRoute"><div class="leg-line" id="legColor" style="background:#3b82f6"></div><span id="legLabel">Route</span></div>
+    </div>
+  </div>
 </div>
 
 <script>
-function openPlanner(){
-    alert("Hier kommt deine vollständige Routen-App hinein.");
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+const S = {
+  key: localStorage.getItem('vr_key') || '',
+  coord: null,       // [lon,lat]
+  name: '',
+  bike: 'road',
+  dist: 50,
+  hot: false,
+  route: null,
+  seed: rnd(),
+  mode: 'plan',
+  map: null,
+  tiles: {},
+  tile: 'osm',
+  rg: null,          // route layer group
+  sm: null,          // start marker
+  em: [],            // edit markers
+};
+function rnd(){ return Math.floor(Math.random()*9999); }
+
+// ══════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  S.map = L.map('map',{ center:[51.16,10.45], zoom:6, zoomControl:false });
+  L.control.zoom({ position:'bottomright' }).addTo(S.map);
+
+  S.tiles.osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© <a href="https://openstreetmap.org">OpenStreetMap</a>', maxZoom:19
+  }).addTo(S.map);
+  S.tiles.topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{
+    attribution:'© <a href="https://opentopomap.org">OpenTopoMap</a>', maxZoom:17
+  });
+
+  S.rg = L.layerGroup().addTo(S.map);
+  S.map.on('click', onMapClick);
+
+  if(S.key){ q('apiIn').value = S.key; dot('ok'); }
+
+  q('apiIn').addEventListener('change', e => {
+    S.key = e.target.value.trim();
+    localStorage.setItem('vr_key', S.key);
+    dot(S.key ? 'ok' : '');
+  });
+  q('dSlider').addEventListener('input', e => {
+    S.dist = +e.target.value;
+    q('dNum').textContent = S.dist;
+  });
+  q('hotTog').addEventListener('change', e => { S.hot = e.target.checked; });
+  q('locIn').addEventListener('keydown', e => { if(e.key==='Enter') geocode(); });
+  q('geoBtn').addEventListener('click', geocode);
+  q('gpsBtn').addEventListener('click', useGPS);
+});
+
+function q(id){ return document.getElementById(id); }
+function dot(s){ q('apiDot').className = 'api-dot'+(s?' '+s:''); }
+
+// ══════════════════════════════════════════
+// TILE LAYER
+// ══════════════════════════════════════════
+function setTile(n){
+  S.map.removeLayer(S.tiles[S.tile]);
+  S.tiles[n].addTo(S.map);
+  S.tile = n;
+  q('tOsm').classList.toggle('on', n==='osm');
+  q('tTopo').classList.toggle('on', n==='topo');
 }
 
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js");
+// ══════════════════════════════════════════
+// BIKE TYPE
+// ══════════════════════════════════════════
+function setBike(t){
+  S.bike = t;
+  q('cRoad').className = 'bike-card'+(t==='road'?' ar':'');
+  q('cGrav').className = 'bike-card'+(t==='gravel'?' ag':'');
 }
+
+// ══════════════════════════════════════════
+// GEOCODING
+// ══════════════════════════════════════════
+async function geocode(){
+  const v = q('locIn').value.trim();
+  if(!v) return;
+  err('locErr','');
+  q('geoBtn').textContent='⌛';
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(v)}&format=json&limit=1&accept-language=de`,
+      { headers:{'User-Agent':'VeloRoute/1.0'} });
+    const d = await r.json();
+    if(!d.length){ err('locErr','Ort nicht gefunden. Bitte präzisiere die Suche.'); return; }
+    const p = d[0];
+    setStart([+p.lon,+p.lat], p.display_name.split(',').slice(0,2).join(', ').trim());
+    q('locIn').value = S.name;
+  } catch(e){ err('locErr','Verbindungsfehler. Bitte erneut versuchen.'); }
+  finally { q('geoBtn').textContent='🔍'; }
+}
+
+async function useGPS(){
+  if(!navigator.geolocation){ err('locErr','GPS nicht verfügbar.'); return; }
+  q('gpsBtn').textContent='⌛';
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const {latitude:lat,longitude:lon} = pos.coords;
+    let name = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=de`);
+      const d = await r.json();
+      if(d.display_name) name = d.display_name.split(',').slice(0,2).join(', ').trim();
+    } catch{}
+    q('locIn').value = name;
+    setStart([lon,lat], name);
+    q('gpsBtn').textContent='📍';
+  }, () => { err('locErr','Standort nicht ermittelbar.'); q('gpsBtn').textContent='📍'; });
+}
+
+function setStart(coord, name){
+  S.coord = coord; S.name = name;
+  const p = q('locPill');
+  p.textContent = '📍 '+name; p.style.display='block';
+  S.map.setView([coord[1],coord[0]], 13);
+  placeStart();
+}
+
+function placeStart(){
+  if(S.sm) S.map.removeLayer(S.sm);
+  const [lo,la] = S.coord;
+  const icon = L.divIcon({
+    html:`<div style="width:14px;height:14px;background:#22c55e;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 3px rgba(34,197,94,.3),0 2px 8px rgba(0,0,0,.5)"></div>`,
+    className:'', iconSize:[14,14], iconAnchor:[7,7]
+  });
+  S.sm = L.marker([la,lo],{icon}).addTo(S.map).bindTooltip(S.name,{direction:'top'});
+}
+
+// ══════════════════════════════════════════
+// ROUTE PLANNING
+// ══════════════════════════════════════════
+async function planRoute(){
+  if(!S.key){ err('routeErr','Bitte gib deinen ORS API Key ein (kostenlos auf openrouteservice.org).'); return; }
+  if(!S.coord){ err('routeErr','Bitte zuerst einen Startpunkt wählen.'); return; }
+  err('routeErr',''); loading(true);
+
+  try {
+    const feature = S.hot ? await planShade() : await roundtrip(S.coord, S.dist);
+    S.route = feature;
+    S.mode = 'review';
+    renderRoute(feature);
+    showResults(feature);
+    q('hint').style.display = 'none';
+  } catch(e){
+    err('routeErr', e.message||'Fehler bei der Routenplanung. Bitte API Key prüfen.');
+  } finally { loading(false); }
+}
+
+async function roundtrip(coord, distKm){
+  const profile = S.bike==='road' ? 'cycling-road' : 'cycling-mountain';
+  return ors(profile, {
+    coordinates:[coord],
+    options:{ round_trip:{ length:distKm*1000, points:5, seed:S.seed } },
+    elevation:true
+  });
+}
+
+async function waypoints(coords){
+  const profile = S.bike==='road' ? 'cycling-road' : 'cycling-mountain';
+  return ors(profile, { coordinates:coords, elevation:true });
+}
+
+async function ors(profile, body){
+  const res = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}/geojson`, {
+    method:'POST',
+    headers:{ 'Authorization':S.key, 'Content-Type':'application/json' },
+    body:JSON.stringify(body)
+  });
+  if(!res.ok){
+    const e = await res.json().catch(()=>({}));
+    const msg = e?.error?.message||'';
+    if(res.status===403) throw new Error('Ungültiger API Key. Bitte auf openrouteservice.org prüfen.');
+    if(res.status===429) throw new Error('API Limit erreicht. Kurz warten und erneut versuchen.');
+    throw new Error('Routenplanung fehlgeschlagen'+(msg?': '+msg:'.'));
+  }
+  const data = await res.json();
+  if(!data.features?.length) throw new Error('Keine Route gefunden. Bitte anderen Startpunkt wählen.');
+  return data.features[0];
+}
+
+// ──────────────────────────────────────────
+// SHADE ROUTING
+// ──────────────────────────────────────────
+async function planShade(){
+  const [lo,la] = S.coord;
+  const radius = Math.min(S.dist*180, 40000);
+  let forests = [];
+  try { forests = await queryForests(la,lo,radius); } catch{}
+
+  if(forests.length>=2){
+    const wps = pickShadeWps(lo,la,forests,S.dist);
+    if(wps.length>=2){
+      try { return await waypoints([S.coord,...wps,S.coord]); } catch{}
+    }
+  }
+  // Fallback: normal roundtrip (with note)
+  return roundtrip(S.coord, S.dist);
+}
+
+async function queryForests(la,lo,rm){
+  const q = `[out:json][timeout:12];(way["landuse"="forest"](around:${rm},${la},${lo});way["natural"="wood"](around:${rm},${la},${lo});relation["landuse"="forest"](around:${rm},${la},${lo});relation["natural"="wood"](around:${rm},${la},${lo});way["leisure"="park"](around:${rm},${la},${lo}););out center qt 80;`;
+  const res = await fetch('https://overpass-api.de/api/interpreter',{
+    method:'POST', body:'data='+encodeURIComponent(q)
+  });
+  if(!res.ok) throw new Error('Overpass error');
+  const d = await res.json();
+  return d.elements.filter(e=>e.center||e.lat).map(e=>e.center?[e.center.lon,e.center.lat]:[e.lon,e.lat]);
+}
+
+function pickShadeWps(cLo,cLa,forests,distKm){
+  const r = distKm/7;
+  return [0,1,2].map(s=>{
+    const min=s*120, max=(s+1)*120;
+    const cands = forests.filter(([fLo,fLa])=>{
+      const b=brng(cLa,cLo,fLa,fLo), d=hav(cLa,cLo,fLa,fLo);
+      return b>=min&&b<max&&d>r*.15&&d<r*3.5;
+    });
+    if(!cands.length) return null;
+    cands.sort((a,b_)=>Math.abs(hav(cLa,cLo,a[1],a[0])-r)-Math.abs(hav(cLa,cLo,b_[1],b_[0])-r));
+    return cands[0];
+  }).filter(Boolean);
+}
+
+// ══════════════════════════════════════════
+// RENDER ROUTE
+// ══════════════════════════════════════════
+function routeColor(){ return S.hot?'#22c55e':S.bike==='road'?'#3b82f6':'#f97316'; }
+
+function renderRoute(feature){
+  S.rg.clearLayers();
+  const coords = feature.geometry.coordinates;
+  const lls = coords.map(c=>[c[1],c[0]]);
+  const col = routeColor();
+
+  // Shadow
+  L.polyline(lls,{color:'rgba(0,0,0,.4)',weight:9,lineCap:'round',lineJoin:'round'}).addTo(S.rg);
+  // Route
+  L.polyline(lls,{color:col,weight:5,opacity:.95,lineCap:'round',lineJoin:'round'}).addTo(S.rg);
+
+  S.map.fitBounds(L.latLngBounds(lls),{padding:[40,40]});
+
+  // Legend
+  q('legColor').style.background = col;
+  q('legLabel').textContent = S.hot?'Schattige Route':S.bike==='road'?'Rennrad Route':'Gravel Route';
+  q('legend').classList.add('on');
+
+  // Re-place start marker above route
+  if(S.sm) S.map.removeLayer(S.sm);
+  placeStart();
+}
+
+// ══════════════════════════════════════════
+// RESULTS UI
+// ══════════════════════════════════════════
+function showResults(f){
+  const sum = f.properties.summary;
+  const segs = f.properties.segments||[];
+  const distKm = (sum.distance/1000).toFixed(1);
+  const mins = Math.round(sum.duration/60);
+  const h=Math.floor(mins/60), m=mins%60;
+  const timeStr = h ? `${h}h ${m.toString().padStart(2,'0')}m` : `${m} min`;
+  let ascent=0; segs.forEach(s=>{ ascent+=s.ascent||0; });
+  const cls = S.hot?'shade':S.bike;
+
+  ['sD','sE','sT'].forEach(id=>{ q(id).className='sv '+cls; });
+  q('sD').textContent = distKm+' km';
+  q('sE').textContent = ascent>0 ? Math.round(ascent)+' m' : '—';
+  q('sT').textContent = timeStr;
+  q('shadeTag').classList.toggle('on', S.hot);
+
+  const coords = f.geometry.coordinates;
+  if(coords[0].length>=3){ drawEle(coords); q('eleWrap').style.display='block'; }
+  else q('eleWrap').style.display='none';
+
+  q('results').classList.add('on');
+}
+
+function drawEle(coords){
+  let cum=[0];
+  for(let i=1;i<coords.length;i++) cum.push(cum[i-1]+hav(coords[i-1][1],coords[i-1][0],coords[i][1],coords[i][0]));
+  const tot=cum[cum.length-1]||1;
+  const elevs=coords.map(c=>c[2]);
+  const eMin=Math.min(...elevs), eMax=Math.max(...elevs), eR=eMax-eMin||1;
+  const W=260,H=48,P=2;
+  const pts=coords.map((_,i)=>{
+    const x=P+(cum[i]/tot)*(W-P*2);
+    const y=H-P-((elevs[i]-eMin)/eR)*(H-P*2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const c=routeColor(), gid='eg'+Date.now();
+  q('eleChart').innerHTML=`
+    <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:48px;display:block">
+      <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${c}" stop-opacity=".45"/>
+        <stop offset="100%" stop-color="${c}" stop-opacity=".03"/>
+      </linearGradient></defs>
+      <polygon points="${pts} ${W-P},${H-P} ${P},${H-P}" fill="url(#${gid})"/>
+      <polyline points="${pts}" fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+    <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:10px;color:#64748b">
+      <span>${Math.round(eMin)} m</span><span>↑${Math.round(eMax-eMin)} m Anstieg</span><span>${Math.round(eMax)} m</span>
+    </div>`;
+}
+
+// ══════════════════════════════════════════
+// GPX EXPORT
+// ══════════════════════════════════════════
+function exportGPX(){
+  if(!S.route) return;
+  const coords = S.route.geometry.coordinates;
+  const label = S.bike==='road'?'Rennrad':'Gravel';
+  const dateStr = new Date().toISOString().slice(0,10);
+  const name = `VeloRoute-${label}-${dateStr}`;
+  const pts = coords.map(c=>{
+    const ele = c.length>=3 ? `\n        <ele>${c[2].toFixed(1)}</ele>` : '';
+    return `      <trkpt lat="${c[1].toFixed(7)}" lon="${c[0].toFixed(7)}">${ele}\n      </trkpt>`;
+  }).join('\n');
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="VeloRoute Planner" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>${name}</name>
+    <desc>Fahrradtyp: ${label}${S.hot?' · Schattige Route':''}</desc>
+    <time>${new Date().toISOString()}</time>
+  </metadata>
+  <trk>
+    <name>${name}</name>
+    <type>${S.bike==='road'?'cycling':'gravel_cycling'}</type>
+    <trkseg>
+${pts}
+    </trkseg>
+  </trk>
+</gpx>`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([gpx],{type:'application/gpx+xml'}));
+  a.download = name+'.gpx';
+  a.click();
+}
+
+// ══════════════════════════════════════════
+// NEW VARIANT
+// ══════════════════════════════════════════
+function newVariant(){ S.seed=rnd(); planRoute(); }
+
+// ══════════════════════════════════════════
+// EDIT MODE
+// ══════════════════════════════════════════
+function enterEdit(){
+  S.mode='edit';
+  q('editBar').classList.add('on');
+  const coords = S.route.geometry.coordinates;
+  [.25,.5,.75].forEach(pct => {
+    const c = coords[Math.floor(pct*coords.length)];
+    addEditMark([c[1],c[0]]);
+  });
+}
+
+function mkEditIcon(){
+  return L.divIcon({
+    html:`<div title="Ziehen · Doppelklick zum Entfernen" style="width:22px;height:22px;background:#f59e0b;border:3px solid #fff;border-radius:50%;cursor:grab;box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center">
+      <svg width="9" height="9" viewBox="0 0 9 9" fill="white"><circle cx="2.2" cy="2.2" r="1.1"/><circle cx="6.8" cy="2.2" r="1.1"/><circle cx="2.2" cy="6.8" r="1.1"/><circle cx="6.8" cy="6.8" r="1.1"/></svg></div>`,
+    className:'', iconSize:[22,22], iconAnchor:[11,11]
+  });
+}
+
+function addEditMark(latlng){
+  const mk = L.marker(latlng,{draggable:true,icon:mkEditIcon()}).addTo(S.map);
+  mk.on('dblclick', e=>{ L.DomEvent.stop(e); S.map.removeLayer(mk); S.em=S.em.filter(m=>m!==mk); });
+  S.em.push(mk);
+}
+
+function onMapClick(e){ if(S.mode==='edit') addEditMark([e.latlng.lat,e.latlng.lng]); }
+
+async function applyEdit(){
+  loading(true);
+  try {
+    const wps = S.em.map(m=>{ const p=m.getLatLng(); return [p.lng,p.lat]; });
+    const feature = await waypoints([S.coord,...wps,S.coord]);
+    S.route=feature;
+    renderRoute(feature);
+    showResults(feature);
+    exitEdit();
+  } catch(e){
+    err('routeErr','Bearbeitung fehlgeschlagen: '+(e.message||'Fehler'));
+    exitEdit();
+  } finally { loading(false); }
+}
+
+function exitEdit(){
+  S.mode='review';
+  q('editBar').classList.remove('on');
+  S.em.forEach(m=>S.map.removeLayer(m));
+  S.em=[];
+}
+
+// ══════════════════════════════════════════
+// GEO MATH
+// ══════════════════════════════════════════
+function hav(la1,lo1,la2,lo2){
+  const R=6371,r=Math.PI/180;
+  const dLa=(la2-la1)*r, dLo=(lo2-lo1)*r;
+  const a=Math.sin(dLa/2)**2+Math.cos(la1*r)*Math.cos(la2*r)*Math.sin(dLo/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function brng(la1,lo1,la2,lo2){
+  const r=Math.PI/180, dLo=(lo2-lo1)*r;
+  const x=Math.sin(dLo)*Math.cos(la2*r);
+  const y=Math.cos(la1*r)*Math.sin(la2*r)-Math.sin(la1*r)*Math.cos(la2*r)*Math.cos(dLo);
+  return(Math.atan2(x,y)/r+360)%360;
+}
+
+// ══════════════════════════════════════════
+// UI HELPERS
+// ══════════════════════════════════════════
+function loading(on){
+  q('genBtn').disabled=on;
+  q('spin').style.display=on?'block':'none';
+  q('genTxt').textContent=on?'Berechne Route…':'ROUTE PLANEN';
+}
+function err(id,msg){ const e=q(id); e.textContent=msg; e.classList.toggle('on',!!msg); }
 </script>
-
 </body>
 </html>
