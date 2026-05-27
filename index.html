@@ -441,29 +441,25 @@ async function planRoute(){
 // ORS options per bike type
 function bikeOpts(extra={}){
   if(S.bike==='road'){
+    // cycling-road Profil bevorzugt Asphalt von Haus aus.
+    // avoid_features: fords + steps zusätzlich ausschließen.
+    // green:0 → keine Wald-/Naturwege, quiet:0.1 minimal.
     return {
-      // surface:1.0 = maximale Präferenz für asphaltierten Untergrund
-      // highways-Vermeidung von Treppen, Fähren, unbefestigten Wegen
       avoid_features:['steps','ferries','fords'],
       profile_params:{
         weightings:{
-          surface:1.0,      // strikt asphalt/paved bevorzugen
-          green:0.0,        // keine Grün-/Naturwege
+          green:0.0,
           quiet:0.1
-        },
-        restrictions:{
-          surface_type:'paved'   // nur befestigte Oberflächen
         }
       },
       ...extra
     };
   } else {
-    // Gravel: Schotter, Waldwege, Trails erlaubt — surface-Präferenz niedrig
+    // Gravel: Waldwege/Schotter aktiv bevorzugen via green + quiet hoch
     return {
       avoid_features:['steps','ferries'],
       profile_params:{
         weightings:{
-          surface:0.1,
           green:0.6,
           quiet:0.3
         }
