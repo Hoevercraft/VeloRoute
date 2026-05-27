@@ -437,18 +437,53 @@ async function planRoute(){
   } finally { loading(false); }
 }
 
+// ORS options per bike type
+function bikeOpts(extra={}){
+  if(S.bike==='road'){
+    return {
+      // surface:1.0 = maximale Präferenz für asphaltierten Untergrund
+      // highways-Vermeidung von Treppen, Fähren, unbefestigten Wegen
+      avoid_features:['steps','ferries','fords'],
+      profile_params:{
+        weightings:{
+          surface:1.0,      // strikt asphalt/paved bevorzugen
+          green:0.0,        // keine Grün-/Naturwege
+          quiet:0.1
+        },
+        restrictions:{
+          surface_type:'paved'   // nur befestigte Oberflächen
+        }
+      },
+      ...extra
+    };
+  } else {
+    // Gravel: Schotter, Waldwege, Trails erlaubt — surface-Präferenz niedrig
+    return {
+      avoid_features:['steps','ferries'],
+      profile_params:{
+        weightings:{
+          surface:0.1,
+          green:0.6,
+          quiet:0.3
+        }
+      },
+      ...extra
+    };
+  }
+}
+
 async function roundtrip(coord, distKm){
   const profile = S.bike==='road' ? 'cycling-road' : 'cycling-mountain';
   return ors(profile, {
     coordinates:[coord],
-    options:{ round_trip:{ length:distKm*1000, points:5, seed:S.seed } },
+    options: bikeOpts({ round_trip:{ length:distKm*1000, points:5, seed:S.seed } }),
     elevation:true
   });
 }
 
 async function waypoints(coords){
   const profile = S.bike==='road' ? 'cycling-road' : 'cycling-mountain';
-  return ors(profile, { coordinates:coords, elevation:true });
+  return ors(profile, { coordinates:coords, options:bikeOpts(), elevation:true });
 }
 
 async function ors(profile, body){
