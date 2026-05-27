@@ -426,7 +426,8 @@ async function planRoute(){
   err('routeErr',''); loading(true);
 
   try {
-    const feature = S.hot ? await planShade() : await roundtrip(S.coord, S.dist);
+    const raw = S.hot ? await planShade() : await roundtrip(S.coord, S.dist);
+    const feature = cleanRoute(raw);
     S.route = feature;
     S.mode = 'review';
     renderRoute(feature);
@@ -700,7 +701,8 @@ async function applyEdit(){
   loading(true);
   try {
     const wps = S.em.map(m=>{ const p=m.getLatLng(); return [p.lng,p.lat]; });
-    const feature = await waypoints([S.coord,...wps,S.coord]);
+    const raw = await waypoints([S.coord,...wps,S.coord]);
+    const feature = cleanRoute(raw);
     S.route=feature;
     renderRoute(feature);
     showResults(feature);
@@ -732,6 +734,48 @@ function brng(la1,lo1,la2,lo2){
   const x=Math.sin(dLo)*Math.cos(la2*r);
   const y=Math.cos(la1*r)*Math.sin(la2*r)-Math.sin(la1*r)*Math.cos(la2*r)*Math.cos(dLo);
   return(Math.atan2(x,y)/r+360)%360;
+}
+
+// ══════════════════════════════════════════
+// BACKTRACK REMOVAL
+// Erkennt kurze Out-and-Back-Nadeln und entfernt sie.
+// Logik: Wenn Punkte i und j nah beieinander liegen UND
+// der Weg i→…→j kürzer als MAX_SPIKE_KM ist,
+// handelt es sich um einen sinnlosen Abstecher.
+// ══════════════════════════════════════════
+function removeBacktracks(coords){
+  const SNAP_KM   = 0.07;  // 70 m — gilt als "gleicher Ort"
+  const MAX_SPIKE = 1.8;   // Abstecher bis 1,8 km werden entfernt
+  const LOOK      = 100;   // Suchfenster (Performance)
+
+  let pts = coords.slice();
+  let changed = true;
+  while(changed){
+    changed = false;
+    outer:
+    for(let i = 0; i < pts.length - 3; i++){
+      for(let j = i + 3; j < Math.min(i + LOOK, pts.length); j++){
+        if(hav(pts[i][1],pts[i][0], pts[j][1],pts[j][0]) < SNAP_KM){
+          let len = 0;
+          for(let k = i; k < j; k++){
+            len += hav(pts[k][1],pts[k][0], pts[k+1][1],pts[k+1][0]);
+            if(len > MAX_SPIKE) break;
+          }
+          if(len <= MAX_SPIKE){
+            pts.splice(i + 1, j - i);
+            changed = true;
+            break outer;
+          }
+        }
+      }
+    }
+  }
+  return pts;
+}
+
+function cleanRoute(feature){
+  feature.geometry.coordinates = removeBacktracks(feature.geometry.coordinates);
+  return feature;
 }
 
 // ══════════════════════════════════════════
