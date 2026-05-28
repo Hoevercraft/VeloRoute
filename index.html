@@ -157,10 +157,13 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
   <div class="hdivider"></div>
   <span style="font-size:12px;color:var(--muted)">Fahrradrouten Planer</span>
   <div class="api-zone">
-    <span class="api-dot" id="apiDot"></span>
-    <span class="api-lbl">ORS API Key</span>
-    <input type="password" class="api-in" id="apiIn" placeholder="dein kostenloser Key…" autocomplete="off">
-    <a href="https://openrouteservice.org/dev/#/login" target="_blank" class="api-link">→ Kostenlos holen</a>
+    <span class="api-dot" id="apiDotGH"></span>
+    <span class="api-lbl">GH Key</span>
+    <input type="password" class="api-in" id="apiInGH" placeholder="GraphHopper Key (Rennrad)" autocomplete="off" style="width:170px">
+    <span class="api-dot" id="apiDotORS" style="margin-left:6px"></span>
+    <span class="api-lbl">ORS Key</span>
+    <input type="password" class="api-in" id="apiIn" placeholder="ORS Key (Gravel)" autocomplete="off" style="width:150px">
+    <a href="https://graphhopper.com/dashboard" target="_blank" class="api-link">→ Keys holen</a>
   </div>
 </header>
 
@@ -287,8 +290,9 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
 // STATE
 // ══════════════════════════════════════════
 const S = {
-  key: localStorage.getItem('vr_key') || '',
-  coord: null,       // [lon,lat]
+  keyGH:  (localStorage.getItem('vr_key_gh')  || '').replace(/[^ -~]/g,'').trim(),
+  keyORS: (localStorage.getItem('vr_key_ors') || '').replace(/[^ -~]/g,'').trim(),
+  coord: null,
   name: '',
   bike: 'road',
   dist: 50,
@@ -299,11 +303,12 @@ const S = {
   map: null,
   tiles: {},
   tile: 'osm',
-  rg: null,          // route layer group
-  sm: null,          // start marker
-  em: [],            // edit markers
+  rg: null,
+  sm: null,
+  em: [],
 };
 function rnd(){ return Math.floor(Math.random()*9999); }
+function sanitize(v){ return v.replace(/[^ -~]/g,'').trim(); }
 
 // ══════════════════════════════════════════
 // INIT
@@ -322,12 +327,20 @@ window.addEventListener('DOMContentLoaded', () => {
   S.rg = L.layerGroup().addTo(S.map);
   S.map.on('click', onMapClick);
 
-  if(S.key){ q('apiIn').value = S.key; dot('ok'); }
+  if(S.keyGH){  q('apiInGH').value = S.keyGH;  dotGH('ok');  }
+  if(S.keyORS){ q('apiIn').value   = S.keyORS; dotORS('ok'); }
 
+  q('apiInGH').addEventListener('change', e => {
+    S.keyGH = sanitize(e.target.value);
+    q('apiInGH').value = S.keyGH;
+    localStorage.setItem('vr_key_gh', S.keyGH);
+    dotGH(S.keyGH ? 'ok' : '');
+  });
   q('apiIn').addEventListener('change', e => {
-    S.key = e.target.value.replace(/[^ -~]/g, '').trim();
-    localStorage.setItem('vr_key', S.key);
-    dot(S.key ? 'ok' : '');
+    S.keyORS = sanitize(e.target.value);
+    q('apiIn').value = S.keyORS;
+    localStorage.setItem('vr_key_ors', S.keyORS);
+    dotORS(S.keyORS ? 'ok' : '');
   });
   q('dSlider').addEventListener('input', e => {
     S.dist = +e.target.value;
@@ -340,7 +353,8 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 function q(id){ return document.getElementById(id); }
-function dot(s){ q('apiDot').className = 'api-dot'+(s?' '+s:''); }
+function dotGH(s){  q('apiDotGH').className  = 'api-dot'+(s?' '+s:''); }
+function dotORS(s){ q('apiDotORS').className = 'api-dot'+(s?' '+s:''); }
 
 // ══════════════════════════════════════════
 // TILE LAYER
@@ -419,9 +433,18 @@ function placeStart(){
 
 // ══════════════════════════════════════════
 // ROUTE PLANNING
+// Rennrad → GraphHopper (custom_model: nur Asphalt)
+// Gravel  → ORS (cycling-mountain, Schotter/Trails)
 // ══════════════════════════════════════════
 async function planRoute(){
-  if(!S.key){ err('routeErr','Bitte gib deinen ORS API Key ein (kostenlos auf openrouteservice.org).'); return; }
+  if(S.bike==='road' && !S.keyGH){
+    err('routeErr','Bitte GraphHopper API Key eingeben (kostenlos: graphhopper.com/dashboard).');
+    return;
+  }
+  if(S.bike==='gravel' && !S.keyORS){
+    err('routeErr','Bitte ORS API Key eingeben (kostenlos: openrouteservice.org).');
+    return;
+  }
   if(!S.coord){ err('routeErr','Bitte zuerst einen Startpunkt wählen.'); return; }
   err('routeErr',''); loading(true);
 
@@ -438,67 +461,115 @@ async function planRoute(){
   } finally { loading(false); }
 }
 
-// ORS options per bike type
-function bikeOpts(extra={}){
-  if(S.bike==='road'){
-    // cycling-road Profil bevorzugt Asphalt von Haus aus.
-    // avoid_features: fords + steps zusätzlich ausschließen.
-    // green:0 → keine Wald-/Naturwege, quiet:0.1 minimal.
-    return {
-      avoid_features:['steps','ferries','fords'],
-      profile_params:{
-        weightings:{
-          green:0.0,
-          quiet:0.1
-        }
-      },
-      ...extra
-    };
-  } else {
-    // Gravel: Waldwege/Schotter aktiv bevorzugen via green + quiet hoch
-    return {
-      avoid_features:['steps','ferries'],
-      profile_params:{
-        weightings:{
-          green:0.6,
-          quiet:0.3
-        }
-      },
-      ...extra
-    };
-  }
-}
-
-async function roundtrip(coord, distKm){
-  const profile = S.bike==='road' ? 'cycling-road' : 'cycling-mountain';
-  return ors(profile, {
-    coordinates:[coord],
-    options: bikeOpts({ round_trip:{ length:distKm*1000, points:5, seed:S.seed } }),
-    elevation:true
+// ── GRAPHHOPPER (Rennrad — strikt asphaltiert) ──
+// custom_model penalisiert unbefestigte Oberflächen mit Faktor 0.01
+// → ORS-Umgehung: GH filtert auf Netzwerk-Ebene
+async function graphhopper(body){
+  const key = sanitize(S.keyGH);
+  const res = await fetch(`https://graphhopper.com/api/1/route?key=${encodeURIComponent(key)}`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)
   });
+  if(!res.ok){
+    const e = await res.json().catch(()=>({}));
+    const msg = e?.message||e?.hints?.[0]?.message||'';
+    if(res.status===401||res.status===403) throw new Error('Ungültiger GraphHopper Key. Bitte auf graphhopper.com/dashboard prüfen.');
+    if(res.status===429) throw new Error('GraphHopper Limit erreicht. Kurz warten und erneut versuchen.');
+    throw new Error('Routenplanung fehlgeschlagen'+(msg?': '+msg:'.'));
+  }
+  const data = await res.json();
+  if(!data.paths?.length) throw new Error('Keine Route gefunden. Bitte anderen Startpunkt wählen.');
+  const path = data.paths[0];
+  // GH-Response → ORS-ähnliches GeoJSON Feature
+  return {
+    type:'Feature',
+    geometry: path.points,   // already GeoJSON LineString with [lon,lat,ele]
+    properties:{
+      summary:{ distance: path.distance, duration: path.time/1000 },
+      segments:[{ ascent: path.ascend||0 }]
+    }
+  };
 }
 
-async function waypoints(coords){
-  const profile = S.bike==='road' ? 'cycling-road' : 'cycling-mountain';
-  return ors(profile, { coordinates:coords, options:bikeOpts(), elevation:true });
+function roadCustomModel(){
+  return {
+    priority:[
+      {if:'surface == UNPAVED',    multiply_by:'0.01'},
+      {if:'surface == GRAVEL',     multiply_by:'0.01'},
+      {if:'surface == DIRT',       multiply_by:'0.01'},
+      {if:'surface == GRASS',      multiply_by:'0.01'},
+      {if:'surface == GROUND',     multiply_by:'0.01'},
+      {if:'surface == SAND',       multiply_by:'0.01'},
+      {if:'surface == MUD',        multiply_by:'0.01'},
+      {if:'surface == PEBBLESTONE',multiply_by:'0.01'},
+      {if:'road_class == TRACK',   multiply_by:'0.01'}
+    ]
+  };
 }
 
+// ── ORS (Gravel) ──
 async function ors(profile, body){
   const res = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}/geojson`, {
     method:'POST',
-    headers:{ 'Authorization':S.key.replace(/[^ -~]/g,'').trim(), 'Content-Type':'application/json' },
+    headers:{'Authorization':sanitize(S.keyORS),'Content-Type':'application/json'},
     body:JSON.stringify(body)
   });
   if(!res.ok){
     const e = await res.json().catch(()=>({}));
     const msg = e?.error?.message||'';
-    if(res.status===403) throw new Error('Ungültiger API Key. Bitte auf openrouteservice.org prüfen.');
-    if(res.status===429) throw new Error('API Limit erreicht. Kurz warten und erneut versuchen.');
+    if(res.status===403) throw new Error('Ungültiger ORS Key. Bitte auf openrouteservice.org prüfen.');
+    if(res.status===429) throw new Error('ORS Limit erreicht. Kurz warten und erneut versuchen.');
     throw new Error('Routenplanung fehlgeschlagen'+(msg?': '+msg:'.'));
   }
   const data = await res.json();
   if(!data.features?.length) throw new Error('Keine Route gefunden. Bitte anderen Startpunkt wählen.');
   return data.features[0];
+}
+
+async function roundtrip(coord, distKm){
+  if(S.bike==='road'){
+    // GraphHopper round trip — Rennrad, nur Asphalt
+    return graphhopper({
+      points:[coord],
+      profile:'bike',
+      algorithm:'round_trip',
+      'round_trip.distance': distKm*1000,
+      'round_trip.seed': S.seed,
+      points_encoded:false,
+      elevation:true,
+      custom_model: roadCustomModel()
+    });
+  } else {
+    // ORS — Gravel, Waldwege bevorzugen
+    return ors('cycling-mountain',{
+      coordinates:[coord],
+      options:{
+        avoid_features:['steps','ferries'],
+        profile_params:{ weightings:{ green:0.6, quiet:0.3 } },
+        round_trip:{ length:distKm*1000, points:5, seed:S.seed }
+      },
+      elevation:true
+    });
+  }
+}
+
+async function waypoints(coords){
+  if(S.bike==='road'){
+    return graphhopper({
+      points:coords,
+      profile:'bike',
+      points_encoded:false,
+      elevation:true,
+      custom_model: roadCustomModel()
+    });
+  } else {
+    return ors('cycling-mountain',{
+      coordinates:coords,
+      options:{ avoid_features:['steps','ferries'], profile_params:{ weightings:{ green:0.6, quiet:0.3 } } },
+      elevation:true
+    });
+  }
 }
 
 // ──────────────────────────────────────────
