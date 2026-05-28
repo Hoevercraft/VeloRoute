@@ -620,7 +620,7 @@ async function roundtrip(coord, distKm){
   } else if(S.bike==='hardcore'){
     return graphhopper({
       points:[coord],
-      profile:'mountain_bike',
+      profile:'bike',
       algorithm:'round_trip',
       'round_trip.distance': distKm*1000,
       'round_trip.seed': S.seed,
@@ -632,7 +632,7 @@ async function roundtrip(coord, distKm){
     // GraphHopper mountain_bike — Schotter/Unbefestigt bevorzugt
     return graphhopper({
       points:[coord],
-      profile:'mountain_bike',
+      profile:'bike',
       algorithm:'round_trip',
       'round_trip.distance': distKm*1000,
       'round_trip.seed': S.seed,
@@ -666,7 +666,7 @@ async function waypoints(coords){
   } else if(S.bike==='hardcore'){
     return graphhopper({
       points:coords,
-      profile:'mountain_bike',
+      profile:'bike',
       points_encoded:false,
       elevation:true,
       custom_model: hardcoreGravelCustomModel()
@@ -674,7 +674,7 @@ async function waypoints(coords){
   } else if(S.bike==='hardcore'){
     return graphhopper({
       points:coords,
-      profile:'mountain_bike',
+      profile:'bike',
       points_encoded:false,
       elevation:true,
       custom_model: hardcoreGravelCustomModel()
