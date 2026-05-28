@@ -610,7 +610,7 @@ async function hardcoreRoundtrip(coord, distKm){
   const [lo, la] = coord;
   const radius = Math.min(distKm * 200, 50000);
   let forestWps = [];
-  setStatus('Suche Waldgebiete…');
+  setStatus('Suche Wald- & Feldwege…');
   try { forestWps = await queryForestWps(la, lo, radius, distKm); } catch(e){}
 
   if(forestWps.length >= 2){
@@ -641,43 +641,69 @@ async function hardcoreRoundtrip(coord, distKm){
 }
 
 async function queryForestWps(la, lo, rm, distKm){
-  // Wald- und Naturgebiete abfragen (kein Kanal/Wasser)
-  const qry = `[out:json][timeout:15];(
+  // 1. Primär: Waldgebiete (bevorzugt)
+  // 2. Fallback: Feldwege/Tracks wenn Wald nicht ausreicht
+  const qryForest = `[out:json][timeout:15];(
     way["landuse"="forest"](around:${rm},${la},${lo});
     way["natural"="wood"](around:${rm},${la},${lo});
     relation["landuse"="forest"](around:${rm},${la},${lo});
     relation["natural"="wood"](around:${rm},${la},${lo});
   );out center qt 120;`;
-  const res = await fetch('https://overpass-api.de/api/interpreter',{
-    method:'POST', body:'data='+encodeURIComponent(qry)
-  });
-  if(!res.ok) throw new Error('Overpass error');
-  const d = await res.json();
-  const forests = d.elements
-    .filter(e => e.center || (e.lat && e.lon))
-    .map(e => e.center ? [e.center.lon, e.center.lat] : [e.lon, e.lat]);
 
-  if(!forests.length) return [];
+  const qryTracks = `[out:json][timeout:15];(
+    way["highway"="track"](around:${rm},${la},${lo});
+    way["highway"="path"]["bicycle"!="no"](around:${rm},${la},${lo});
+  );out center qt 200;`;
 
-  // 3 Wegpunkte in gleichmäßigen Winkeln (120°) um den Start verteilen
-  // Abstand: ~distKm/4 vom Start — ergibt harmonische Rundform
+  // Beide Queries parallel abfeuern
+  const [resF, resT] = await Promise.allSettled([
+    fetch('https://overpass-api.de/api/interpreter',{ method:'POST', body:'data='+encodeURIComponent(qryForest) }),
+    fetch('https://overpass-api.de/api/interpreter',{ method:'POST', body:'data='+encodeURIComponent(qryTracks) })
+  ]);
+
+  let forests = [], tracks = [];
+
+  if(resF.status==='fulfilled' && resF.value.ok){
+    const d = await resF.value.json();
+    forests = d.elements
+      .filter(e => e.center || (e.lat && e.lon))
+      .map(e => e.center ? [e.center.lon, e.center.lat] : [e.lon, e.lat]);
+  }
+
+  if(resT.status==='fulfilled' && resT.value.ok){
+    const d = await resT.value.json();
+    tracks = d.elements
+      .filter(e => e.center || (e.lat && e.lon))
+      .map(e => e.center ? [e.center.lon, e.center.lat] : [e.lon, e.lat]);
+  }
+
+  // Wald hat Vorrang — Tracks nur als Ergänzung wenn Wald-Abdeckung dünn
+  // Mischverhältnis: erst Waldpunkte, dann Tracks auffüllen
+  const primary   = forests;
+  const secondary = tracks;
+
   const targetDist = distKm / 4;
+
   const wps = [0, 1, 2].map(i => {
     const angle = (i * 120 + 30) % 360; // 30°, 150°, 270°
-    // Kandidaten im richtigen Winkelsektor und passender Entfernung
-    const cands = forests.filter(([fLo, fLa]) => {
-      const b = brng(la, lo, fLa, fLo);
-      const dist = hav(la, lo, fLa, fLo);
-      const angleDiff = Math.abs(((b - angle + 540) % 360) - 180);
-      return angleDiff < 55 && dist > targetDist * 0.3 && dist < targetDist * 2.5;
-    });
-    if(!cands.length) return null;
-    // Nächsten zum Zielabstand wählen
-    cands.sort((a, b_) =>
-      Math.abs(hav(la,lo,a[1],a[0]) - targetDist) -
-      Math.abs(hav(la,lo,b_[1],b_[0]) - targetDist)
-    );
-    return cands[0];
+
+    const best = (pool) => {
+      const cands = pool.filter(([fLo, fLa]) => {
+        const b    = brng(la, lo, fLa, fLo);
+        const dist = hav(la, lo, fLa, fLo);
+        const angleDiff = Math.abs(((b - angle + 540) % 360) - 180);
+        return angleDiff < 55 && dist > targetDist * 0.3 && dist < targetDist * 2.5;
+      });
+      if(!cands.length) return null;
+      cands.sort((a, b_) =>
+        Math.abs(hav(la,lo,a[1],a[0]) - targetDist) -
+        Math.abs(hav(la,lo,b_[1],b_[0]) - targetDist)
+      );
+      return cands[0];
+    };
+
+    // Wald bevorzugen, Feldweg als gleichwertiger Fallback
+    return best(primary) || best(secondary);
   }).filter(Boolean);
 
   return wps;
