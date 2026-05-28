@@ -496,32 +496,32 @@ function roadCustomModel(){
 
   return {
 
-    distance_influence: 15,
-
-    speed:[
-
-      // VERBOTENE OBERFLÄCHEN
-      { if:'road_class == TRACK', limit_to:'1' },
-      { if:'road_class == PATH', limit_to:'1' },
-
-      { if:'surface == GRAVEL', limit_to:'1' },
-      { if:'surface == FINE_GRAVEL', limit_to:'1' },
-      { if:'surface ==GROUND', limit_to:'1' },
-      { if:'surface == DIRT', limit_to:'1' },
-      { if:'surface == SAND', limit_to:'1' },
-      { if:'surface == GRASS', limit_to:'1' }
-
-    ],
+    distance_influence: 20,
 
     priority:[
 
-      // GUTE STRASSEN PUSHEN
-      { if:'road_class == RESIDENTIAL', multiply_by:'1.2' },
-      { if:'road_class == TERTIARY', multiply_by:'1.3' },
-      { if:'road_class == SECONDARY', multiply_by:'1.1' },
+      // ABSOLUT UNERWÜNSCHT
+      { if:'road_class == TRACK', multiply_by:'0.01' },
+      { if:'road_class == PATH', multiply_by:'0.01' },
+
+      { if:'surface == GRAVEL', multiply_by:'0.01' },
+      { if:'surface == FINE_GRAVEL', multiply_by:'0.01' },
+      { if:'surface == GROUND', multiply_by:'0.01' },
+      { if:'surface == DIRT', multiply_by:'0.01' },
+      { if:'surface == SAND', multiply_by:'0.01' },
+      { if:'surface == GRASS', multiply_by:'0.01' },
+
+      // ASPHALT MASSIV PUSHEN
+      { if:'surface == ASPHALT', multiply_by:'3.0' },
+      { if:'surface == PAVED', multiply_by:'2.5' },
+
+      // STRASSENKLASSEN PUSHEN
+      { if:'road_class == RESIDENTIAL', multiply_by:'1.5' },
+      { if:'road_class == TERTIARY', multiply_by:'1.6' },
+      { if:'road_class == SECONDARY', multiply_by:'1.3' },
 
       // ASPHALTIERTE RADWEGE
-      { if:'road_class == CYCLEWAY && surface == ASPHALT', multiply_by:'1.5' }
+      { if:'road_class == CYCLEWAY && surface == ASPHALT', multiply_by:'2.5' }
 
     ]
   };
