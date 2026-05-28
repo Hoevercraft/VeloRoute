@@ -584,23 +584,41 @@ function hardcoreGravelCustomModel(){
 // FINE_GRAVEL, TRACK und PATH behalten volle Priorität 1.0 und werden
 // vom Round-Trip-Algorithmus aktiv bevorzugt.
 function hardcoreGravelCustomModel(){
+  // distance_influence: hoher Wert = Algo nimmt gerne längere Umwege
+  // für bessere (= unbefestigte) Oberflächen.
+  // Logik: Alles ohne Asphalt/Beton hat Prio 1.0 → wird aktiv gesucht.
+  // Asphalt/Beton bekommt extrem niedrige Prio → nur wenn absolut keine
+  // andere Verbindung existiert.
   return {
+    distance_influence: 150,
     priority:[
-      // Asphaltierte Hauptstraßen stark bestrafen
-      {if:'surface == ASPHALT && road_class == PRIMARY',   multiply_by:'0.05'},
-      {if:'surface == ASPHALT && road_class == SECONDARY', multiply_by:'0.08'},
-      {if:'surface == ASPHALT && road_class == TERTIARY',  multiply_by:'0.15'},
-      {if:'surface == CONCRETE',                           multiply_by:'0.1'},
-      {if:'surface == PAVING_STONES',                      multiply_by:'0.2'},
-      // Autobahnen/Schnellstraßen grundsätzlich sperren
-      {if:'road_class == MOTORWAY',  multiply_by:'0.01'},
-      {if:'road_class == TRUNK',     multiply_by:'0.02'}
-      // GRAVEL, GROUND, SAND, FINE_GRAVEL, TRACK, PATH → Prio 1.0 (bevorzugt)
+      // ── ASPHALT / BETON: komplett unerwünscht ──
+      {if:'surface == ASPHALT',        multiply_by:'0.02'},
+      {if:'surface == CONCRETE',       multiply_by:'0.02'},
+      {if:'surface == PAVING_STONES',  multiply_by:'0.04'},
+      {if:'surface == COBBLESTONE',    multiply_by:'0.06'},
+      {if:'surface == SETT',           multiply_by:'0.06'},
+      // ── UNBEFESTIGT: maximale Priorität ──
+      {if:'surface == GRAVEL',         multiply_by:'3.0'},
+      {if:'surface == FINE_GRAVEL',    multiply_by:'3.0'},
+      {if:'surface == GROUND',         multiply_by:'2.8'},
+      {if:'surface == DIRT',           multiply_by:'2.8'},
+      {if:'surface == SAND',           multiply_by:'2.5'},
+      {if:'surface == GRASS',          multiply_by:'2.2'},
+      {if:'surface == COMPACTED',      multiply_by:'2.5'},
+      // ── WEGE-TYPEN: Schotter-/Waldwege maximal bevorzugen ──
+      {if:'road_class == TRACK',       multiply_by:'3.0'},
+      {if:'road_class == PATH',        multiply_by:'2.5'},
+      // ── STRASSEN: sperren ──
+      {if:'road_class == MOTORWAY',    multiply_by:'0.01'},
+      {if:'road_class == TRUNK',       multiply_by:'0.01'},
+      {if:'road_class == PRIMARY',     multiply_by:'0.03'},
+      {if:'road_class == SECONDARY',   multiply_by:'0.05'}
     ],
     speed:[
-      // Asphaltierte Nebenstraßen verlangsamen damit Schotterwege attraktiver werden
-      {if:'surface == ASPHALT && road_class == RESIDENTIAL', limit_to:'10'},
-      {if:'surface == ASPHALT && road_class == TERTIARY',    limit_to:'12'}
+      // Asphalt massiv verlangsamen → Umweg über Schotter lohnt sich
+      {if:'surface == ASPHALT',   limit_to:'5'},
+      {if:'surface == CONCRETE',  limit_to:'5'}
     ]
   };
 }
