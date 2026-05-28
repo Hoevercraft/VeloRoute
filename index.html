@@ -483,10 +483,29 @@ async function planRoute(){
   err('routeErr',''); loading(true);
 
   try {
-    setStatus('Berechne Route…');
-    const raw = S.hot ? await planShade() : await roundtrip(S.coord, S.dist);
-    setStatus('Bereinige Route…');
-    const feature = cleanRoute(raw);
+    // ── Distanz-kontrollierte Retry-Schleife ──
+    // Wenn die Route mehr als 10 km über der Zieldistanz liegt,
+    // wird der Hint proportional nach unten skaliert und neu berechnet.
+    const MAX_OVER_KM = 10;
+    const MAX_TRIES   = 3;
+    let hintDist = S.dist;
+    let feature;
+
+    for(let attempt = 0; attempt < MAX_TRIES; attempt++){
+      setStatus(attempt === 0 ? 'Berechne Route…' : `Passe Distanz an… (${hintDist.toFixed(0)} km)`);
+      const raw = S.hot ? await planShade() : await roundtrip(S.coord, hintDist);
+      setStatus('Bereinige Route…');
+      feature = cleanRoute(raw);
+
+      const actualKm = feature.properties.summary.distance / 1000;
+      if(actualKm <= S.dist + MAX_OVER_KM) break; // passt — fertig
+
+      // Proportional skalieren: z.B. Ziel 50 km, Ergebnis 80 km → neuer Hint: 50*(50/80) ≈ 31 km
+      const scaled = Math.max(10, hintDist * (S.dist / actualKm));
+      if(Math.abs(scaled - hintDist) < 1) break; // kein Fortschritt mehr — abbrechen
+      hintDist = scaled;
+    }
+
     S.route = feature;
     S.mode = 'review';
     renderRoute(feature);
