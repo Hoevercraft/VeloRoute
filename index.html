@@ -15,6 +15,8 @@
   --warm:#f59e0b;--warm-dim:rgba(245,158,11,.12);
   --blue:#3b82f6;--blue-dim:rgba(59,130,246,.13);
   --orange:#f97316;--orange-dim:rgba(249,115,22,.13);
+  --red:#e11d48;--red-dim:rgba(225,29,72,.13);
+  --red:#e11d48;--red-dim:rgba(225,29,72,.13);
   --text:#e2e8f0;--muted:#64748b;--danger:#ef4444;--r:10px;
 }
 html,body{height:100%}
@@ -61,6 +63,12 @@ header{height:54px;background:var(--panel);border-bottom:1px solid var(--border)
 .bc-sub{font-size:10px;color:var(--muted);line-height:1.3}
 .bike-card.ar{border-color:var(--blue);background:var(--blue-dim)}.bike-card.ar .bc-title{color:var(--blue)}
 .bike-card.ag{border-color:var(--orange);background:var(--orange-dim)}.bike-card.ag .bc-title{color:var(--orange)}
+.bike-card.ahc{border-color:var(--red);background:var(--red-dim)}.bike-card.ahc .bc-title,.bike-card.ahc .bc-icon{color:var(--red)}
+.bike-card.full{grid-column:1/-1;flex-direction:row;gap:12px;text-align:left;padding:11px 14px;align-items:center}
+.bike-card.full .bc-sub{text-align:left}
+.bike-card.ahc{border-color:var(--red);background:var(--red-dim)}.bike-card.ahc .bc-title{color:var(--red)}
+.bike-card.full{grid-column:1/-1;flex-direction:row;gap:12px;text-align:left;padding:10px 14px}
+.bike-card.full .bc-sub{flex:1}
 
 /* Distance */
 .dist-top{display:flex;align-items:baseline;gap:6px;margin-bottom:10px}
@@ -100,7 +108,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
 .stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
 .stat-box{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 5px;text-align:center}
 .sv{font-family:'Bebas Neue',sans-serif;font-size:19px;line-height:1}
-.sv.road{color:var(--blue)}.sv.gravel{color:var(--orange)}.sv.shade{color:var(--accent)}
+.sv.road{color:var(--blue)}.sv.gravel{color:var(--orange)}.sv.hardcore{color:var(--red)}.sv.shade{color:var(--accent)}
 .sl{font-size:10px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.5px}
 .ele-wrap{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;display:none}
 .ele-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
@@ -195,6 +203,13 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
           <div class="bc-icon">🚵</div>
           <div class="bc-title">Gravel</div>
           <div class="bc-sub">Wald-, Schotter- &amp; Trails</div>
+        </div>
+        <div class="bike-card full" id="cHard" onclick="setBike('hardcore')">
+          <div class="bc-icon">💀</div>
+          <div style="flex:1">
+            <div class="bc-title">Hardcore Gravel</div>
+            <div class="bc-sub">Schotter · Sand · unbefestigter Boden · feiner Kies priorisiert</div>
+          </div>
         </div>
       </div>
     </div>
@@ -374,6 +389,7 @@ function setBike(t){
   S.bike = t;
   q('cRoad').className = 'bike-card'+(t==='road'?' ar':'');
   q('cGrav').className = 'bike-card'+(t==='gravel'?' ag':'');
+  q('cHard').className = 'bike-card full'+(t==='hardcore'?' ahc':'');
 }
 
 // ══════════════════════════════════════════
@@ -437,7 +453,7 @@ function placeStart(){
 // Gravel  → ORS (cycling-mountain, Schotter/Trails)
 // ══════════════════════════════════════════
 async function planRoute(){
-  if(S.bike==='road' && !S.keyGH){
+  if((S.bike==='road'||S.bike==='hardcore') && !S.keyGH){
     err('routeErr','Bitte GraphHopper API Key eingeben (kostenlos: graphhopper.com/dashboard).');
     return;
   }
@@ -493,36 +509,79 @@ async function graphhopper(body){
 }
 
 function roadCustomModel(){
-
+  // Doppel-Sperre: speed UND priority.
+  // speed-Limit auf 2 km/h = Segment dauert 15-30x länger → Round-Trip-Algo meidet es.
+  // priority 0.01 = zusätzliche Gewichtungsstrafe.
+  // road_class TRACK = highway=track (Forst-/Feldwege)
+  // road_class PATH  = highway=path/footway/bridleway (Wiesen-/Waldpfade)
+  // surface-Filter fängt explizit getaggte unbefestigte Oberflächen.
   return {
-
-    distance_influence: 20,
-
+    speed:[
+      {if:'road_class == TRACK',    limit_to:'2'},
+      {if:'road_class == PATH',     limit_to:'2'},
+      {if:'surface == GRAVEL',      limit_to:'2'},
+      {if:'surface == GROUND',      limit_to:'2'},
+      {if:'surface == GRASS',       limit_to:'2'},
+      {if:'surface == SAND',        limit_to:'2'},
+      {if:'surface == FINE_GRAVEL', limit_to:'2'}
+    ],
     priority:[
+      {if:'road_class == TRACK',    multiply_by:'0.01'},
+      {if:'road_class == PATH',     multiply_by:'0.01'},
+      {if:'surface == GRAVEL',      multiply_by:'0.01'},
+      {if:'surface == GROUND',      multiply_by:'0.01'},
+      {if:'surface == GRASS',       multiply_by:'0.01'},
+      {if:'surface == SAND',        multiply_by:'0.01'},
+      {if:'surface == FINE_GRAVEL', multiply_by:'0.01'}
+    ]
+  };
+}
 
-      // ABSOLUT UNERWÜNSCHT
-      { if:'road_class == TRACK', multiply_by:'0.01' },
-      { if:'road_class == PATH', multiply_by:'0.01' },
+// ── GRAPHHOPPER (Hardcore Gravel — unbefestigt priorisiert) ──
+// Invertierte Logik: Asphalt/Beton wird bestraft → GRAVEL, GROUND, SAND, FINE_GRAVEL
+// behalten volle Priorität (1.0) und werden damit vom Algorithmus bevorzugt.
+// mountain_bike-Profil = technisch für raues Gelände ausgelegt.
+function hardcoreGravelCustomModel(){
+  return {
+    priority:[
+      // Befestigte Oberflächen stark bestrafen
+      {if:'surface == ASPHALT',       multiply_by:'0.1'},
+      {if:'surface == CONCRETE',      multiply_by:'0.1'},
+      {if:'surface == PAVING_STONES', multiply_by:'0.15'},
+      {if:'surface == COBBLESTONE',   multiply_by:'0.2'},
+      // Schnellstraßen meiden — Hardcore bleibt auf Nebenwegen
+      {if:'road_class == MOTORWAY',   multiply_by:'0.01'},
+      {if:'road_class == TRUNK',      multiply_by:'0.05'},
+      {if:'road_class == PRIMARY',    multiply_by:'0.15'},
+      {if:'road_class == SECONDARY',  multiply_by:'0.3'}
+      // GRAVEL, GROUND, SAND, FINE_GRAVEL, TRACK, PATH behalten Prio 1.0 → bevorzugt
+    ]
+  };
+}
 
-      { if:'surface == GRAVEL', multiply_by:'0.01' },
-      { if:'surface == FINE_GRAVEL', multiply_by:'0.01' },
-      { if:'surface == GROUND', multiply_by:'0.01' },
-      { if:'surface == DIRT', multiply_by:'0.01' },
-      { if:'surface == SAND', multiply_by:'0.01' },
-      { if:'surface == GRASS', multiply_by:'0.01' },
 
-      // ASPHALT MASSIV PUSHEN
-      { if:'surface == ASPHALT', multiply_by:'3.0' },
-      { if:'surface == PAVED', multiply_by:'2.5' },
-
-      // STRASSENKLASSEN PUSHEN
-      { if:'road_class == RESIDENTIAL', multiply_by:'1.5' },
-      { if:'road_class == TERTIARY', multiply_by:'1.6' },
-      { if:'road_class == SECONDARY', multiply_by:'1.3' },
-
-      // ASPHALTIERTE RADWEGE
-      { if:'road_class == CYCLEWAY && surface == ASPHALT', multiply_by:'2.5' }
-
+// ── GRAPHHOPPER (Hardcore Gravel — unbefestigt priorisiert) ──
+// Invertierte Logik: Asphalt/Beton bekommt Malus → GRAVEL, GROUND, SAND,
+// FINE_GRAVEL, TRACK und PATH behalten volle Priorität 1.0 und werden
+// vom Round-Trip-Algorithmus aktiv bevorzugt.
+function hardcoreGravelCustomModel(){
+  return {
+    priority:[
+      // Asphaltierte Hauptstraßen stark bestrafen
+      {if:'surface == ASPHALT && road_class == PRIMARY',   multiply_by:'0.05'},
+      {if:'surface == ASPHALT && road_class == SECONDARY', multiply_by:'0.08'},
+      {if:'surface == ASPHALT && road_class == TERTIARY',  multiply_by:'0.15'},
+      {if:'surface == CONCRETE',                           multiply_by:'0.1'},
+      {if:'surface == PAVING_STONES',                      multiply_by:'0.2'},
+      // Autobahnen/Schnellstraßen grundsätzlich sperren
+      {if:'road_class == MOTORWAY',  multiply_by:'0.01'},
+      {if:'road_class == TRUNK',     multiply_by:'0.02'}
+      // GRAVEL, GROUND, SAND, FINE_GRAVEL, TRACK, PATH → Prio 1.0 (bevorzugt)
+    ],
+    speed:[
+      // Asphaltierte Nebenstraßen verlangsamen damit Schotterwege attraktiver werden
+      {if:'surface == ASPHALT && road_class == RESIDENTIAL', limit_to:'10'},
+      {if:'surface == ASPHALT && road_class == TERTIARY',    limit_to:'12'}
     ]
   };
 }
@@ -548,7 +607,6 @@ async function ors(profile, body){
 
 async function roundtrip(coord, distKm){
   if(S.bike==='road'){
-    // GraphHopper round trip — Rennrad, nur Asphalt
     return graphhopper({
       points:[coord],
       profile:'bike',
@@ -556,13 +614,31 @@ async function roundtrip(coord, distKm){
       'round_trip.distance': distKm*1000,
       'round_trip.seed': S.seed,
       points_encoded:false,
-        details:[
-    'surface',
-    'road_class',
-    'track_type'
-  ],
       elevation:true,
       custom_model: roadCustomModel()
+    });
+  } else if(S.bike==='hardcore'){
+    return graphhopper({
+      points:[coord],
+      profile:'mountain_bike',
+      algorithm:'round_trip',
+      'round_trip.distance': distKm*1000,
+      'round_trip.seed': S.seed,
+      points_encoded:false,
+      elevation:true,
+      custom_model: hardcoreGravelCustomModel()
+    });
+  } else if(S.bike==='hardcore'){
+    // GraphHopper mountain_bike — Schotter/Unbefestigt bevorzugt
+    return graphhopper({
+      points:[coord],
+      profile:'mountain_bike',
+      algorithm:'round_trip',
+      'round_trip.distance': distKm*1000,
+      'round_trip.seed': S.seed,
+      points_encoded:false,
+      elevation:true,
+      custom_model: hardcoreGravelCustomModel()
     });
   } else {
     // ORS — Gravel, Waldwege bevorzugen
@@ -584,13 +660,24 @@ async function waypoints(coords){
       points:coords,
       profile:'bike',
       points_encoded:false,
-      details:[
-  'surface',
-  'road_class',
-  'track_type'
-],
       elevation:true,
       custom_model: roadCustomModel()
+    });
+  } else if(S.bike==='hardcore'){
+    return graphhopper({
+      points:coords,
+      profile:'mountain_bike',
+      points_encoded:false,
+      elevation:true,
+      custom_model: hardcoreGravelCustomModel()
+    });
+  } else if(S.bike==='hardcore'){
+    return graphhopper({
+      points:coords,
+      profile:'mountain_bike',
+      points_encoded:false,
+      elevation:true,
+      custom_model: hardcoreGravelCustomModel()
     });
   } else {
     return ors('cycling-mountain',{
@@ -647,7 +734,7 @@ function pickShadeWps(cLo,cLa,forests,distKm){
 // ══════════════════════════════════════════
 // RENDER ROUTE
 // ══════════════════════════════════════════
-function routeColor(){ return S.hot?'#22c55e':S.bike==='road'?'#3b82f6':'#f97316'; }
+function routeColor(){ return S.hot?'#22c55e':S.bike==='road'?'#3b82f6':S.bike==='hardcore'?'#e11d48':'#f97316'; }
 
 function renderRoute(feature){
   S.rg.clearLayers();
@@ -664,7 +751,7 @@ function renderRoute(feature){
 
   // Legend
   q('legColor').style.background = col;
-  q('legLabel').textContent = S.hot?'Schattige Route':S.bike==='road'?'Rennrad Route':'Gravel Route';
+  q('legLabel').textContent = S.hot?'Schattige Route':S.bike==='road'?'Rennrad Route':S.bike==='hardcore'?'Hardcore Gravel':'Gravel Route';
   q('legend').classList.add('on');
 
   // Re-place start marker above route
@@ -683,7 +770,7 @@ function showResults(f){
   const h=Math.floor(mins/60), m=mins%60;
   const timeStr = h ? `${h}h ${m.toString().padStart(2,'0')}m` : `${m} min`;
   let ascent=0; segs.forEach(s=>{ ascent+=s.ascent||0; });
-  const cls = S.hot?'shade':S.bike;
+  const cls = S.hot?'shade':(S.bike==='hardcore'?'hardcore':S.bike);
 
   ['sD','sE','sT'].forEach(id=>{ q(id).className='sv '+cls; });
   q('sD').textContent = distKm+' km';
@@ -731,7 +818,7 @@ function drawEle(coords){
 function exportGPX(){
   if(!S.route) return;
   const coords = S.route.geometry.coordinates;
-  const label = S.bike==='road'?'Rennrad':'Gravel';
+  const label = S.bike==='road'?'Rennrad':S.bike==='hardcore'?'Hardcore-Gravel':'Gravel';
   const dateStr = new Date().toISOString().slice(0,10);
   const name = `VeloRoute-${label}-${dateStr}`;
   const pts = coords.map(c=>{
@@ -747,7 +834,7 @@ function exportGPX(){
   </metadata>
   <trk>
     <name>${name}</name>
-    <type>${S.bike==='road'?'cycling':'gravel_cycling'}</type>
+    <type>${S.bike==='road'?'cycling':S.bike==='hardcore'?'mountain_biking':'gravel_cycling'}</type>
     <trkseg>
 ${pts}
     </trkseg>
