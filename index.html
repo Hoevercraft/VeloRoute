@@ -483,7 +483,9 @@ async function planRoute(){
   err('routeErr',''); loading(true);
 
   try {
+    setStatus('Berechne Route…');
     const raw = S.hot ? await planShade() : await roundtrip(S.coord, S.dist);
+    setStatus('Bereinige Route…');
     const feature = cleanRoute(raw);
     S.route = feature;
     S.mode = 'review';
@@ -608,9 +610,11 @@ async function hardcoreRoundtrip(coord, distKm){
   const [lo, la] = coord;
   const radius = Math.min(distKm * 200, 50000);
   let forestWps = [];
+  setStatus('Suche Waldgebiete…');
   try { forestWps = await queryForestWps(la, lo, radius, distKm); } catch(e){}
 
   if(forestWps.length >= 2){
+    setStatus('Optimiere Route durch Wald…');
     try {
       return await graphhopper({
         points: [coord, ...forestWps, coord],
@@ -747,15 +751,6 @@ async function waypoints(coords){
       details:['surface'],
       custom_model: hardcoreGravelCustomModel()
     });
-  } else if(S.bike==='hardcore'){
-    return graphhopper({
-      points:coords,
-      profile:'bike',
-      points_encoded:false,
-      elevation:true,
-      details:['surface'],
-      custom_model: hardcoreGravelCustomModel()
-    });
   } else {
     return ors('cycling-mountain',{
       coordinates:coords,
@@ -772,6 +767,7 @@ async function planShade(){
   const [lo,la] = S.coord;
   const radius = Math.min(S.dist*180, 40000);
   let forests = [];
+  setStatus('Suche schattige Wege…');
   try { forests = await queryForests(la,lo,radius); } catch{}
 
   if(forests.length>=2){
@@ -1144,11 +1140,12 @@ function cleanRoute(feature){
 // ══════════════════════════════════════════
 // UI HELPERS
 // ══════════════════════════════════════════
-function loading(on){
-  q('genBtn').disabled=on;
-  q('spin').style.display=on?'block':'none';
-  q('genTxt').textContent=on?'Berechne Route…':'ROUTE PLANEN';
+function loading(on, msg){
+  q('genBtn').disabled = on;
+  q('spin').style.display = on ? 'block' : 'none';
+  q('genTxt').textContent = on ? (msg||'Berechne Route…') : 'ROUTE PLANEN';
 }
+function setStatus(msg){ loading(true, msg); }
 function err(id,msg){ const e=q(id); e.textContent=msg; e.classList.toggle('on',!!msg); }
 </script>
 </body>
