@@ -493,17 +493,17 @@ async function graphhopper(body){
 }
 
 function roadCustomModel(){
+  // Nur bestätigte GraphHopper Surface-Enum-Werte verwenden.
+  // GRAVEL, GROUND, GRASS, SAND, FINE_GRAVEL sind valide GH-Enums.
+  // road_class TRACK = Forstwege/Feldwege (highway=track in OSM).
   return {
     priority:[
-      {if:'surface == UNPAVED',    multiply_by:'0.01'},
-      {if:'surface == GRAVEL',     multiply_by:'0.01'},
-      {if:'surface == DIRT',       multiply_by:'0.01'},
-      {if:'surface == GRASS',      multiply_by:'0.01'},
-      {if:'surface == GROUND',     multiply_by:'0.01'},
-      {if:'surface == SAND',       multiply_by:'0.01'},
-      {if:'surface == MUD',        multiply_by:'0.01'},
-      {if:'surface == PEBBLESTONE',multiply_by:'0.01'},
-      {if:'road_class == TRACK',   multiply_by:'0.01'}
+      {if:'surface == GRAVEL',      multiply_by:'0.01'},
+      {if:'surface == GROUND',      multiply_by:'0.01'},
+      {if:'surface == GRASS',       multiply_by:'0.01'},
+      {if:'surface == SAND',        multiply_by:'0.01'},
+      {if:'surface == FINE_GRAVEL', multiply_by:'0.01'},
+      {if:'road_class == TRACK',    multiply_by:'0.01'}
     ]
   };
 }
