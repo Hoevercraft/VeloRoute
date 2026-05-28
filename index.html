@@ -528,21 +528,19 @@ function roadCustomModel(){
       { if:'surface == MISSING', multiply_by:'0' },
 
       // UNBEFESTIGT
-      { if:'surface == GRAVEL', multiply_by:'0' },
-      { if:'surface == FINE_GRAVEL', multiply_by:'0' },
-      { if:'surface == GROUND', multiply_by:'0' },
-      { if:'surface == DIRT', multiply_by:'0' },
-      { if:'surface == EARTH', multiply_by:'0' },
-      { if:'surface == MUD', multiply_by:'0' },
-      { if:'surface == SAND', multiply_by:'0' },
-      { if:'surface == GRASS', multiply_by:'0' },
-      { if:'surface == WOODCHIPS', multiply_by:'0' },
+{ if:'surface == GRAVEL', multiply_by:'0' },
+{ if:'surface == FINE_GRAVEL', multiply_by:'0' },
+{ if:'surface == GROUND', multiply_by:'0' },
+{ if:'surface == DIRT', multiply_by:'0' },
+{ if:'surface == MUD', multiply_by:'0' },
+{ if:'surface == SAND', multiply_by:'0' },
+{ if:'surface == GRASS', multiply_by:'0' },
 
-      // SCHLECHTE WEGE
-      { if:'smoothness == BAD', multiply_by:'0' },
-      { if:'smoothness == VERY_BAD', multiply_by:'0' },
-      { if:'smoothness == HORRIBLE', multiply_by:'0' },
-      { if:'smoothness == VERY_HORRIBLE', multiply_by:'0' },
+// SCHLECHTE WEGE
+{ if:'smoothness == BAD', multiply_by:'0' },
+{ if:'smoothness == VERY_BAD', multiply_by:'0' },
+{ if:'smoothness == HORRIBLE', multiply_by:'0' },
+{ if:'smoothness == VERY_HORRIBLE', multiply_by:'0' },
 
       // TRACKS NUR GRADE1
       { if:'track_type != GRADE1', multiply_by:'0' },
