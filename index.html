@@ -493,17 +493,30 @@ async function graphhopper(body){
 }
 
 function roadCustomModel(){
-  // Nur bestätigte GraphHopper Surface-Enum-Werte verwenden.
-  // GRAVEL, GROUND, GRASS, SAND, FINE_GRAVEL sind valide GH-Enums.
-  // road_class TRACK = Forstwege/Feldwege (highway=track in OSM).
+  // Doppel-Sperre: speed UND priority.
+  // speed-Limit auf 2 km/h = Segment dauert 15-30x länger → Round-Trip-Algo meidet es.
+  // priority 0.01 = zusätzliche Gewichtungsstrafe.
+  // road_class TRACK = highway=track (Forst-/Feldwege)
+  // road_class PATH  = highway=path/footway/bridleway (Wiesen-/Waldpfade)
+  // surface-Filter fängt explizit getaggte unbefestigte Oberflächen.
   return {
+    speed:[
+      {if:'road_class == TRACK',    limit_to:'2'},
+      {if:'road_class == PATH',     limit_to:'2'},
+      {if:'surface == GRAVEL',      limit_to:'2'},
+      {if:'surface == GROUND',      limit_to:'2'},
+      {if:'surface == GRASS',       limit_to:'2'},
+      {if:'surface == SAND',        limit_to:'2'},
+      {if:'surface == FINE_GRAVEL', limit_to:'2'}
+    ],
     priority:[
+      {if:'road_class == TRACK',    multiply_by:'0.01'},
+      {if:'road_class == PATH',     multiply_by:'0.01'},
       {if:'surface == GRAVEL',      multiply_by:'0.01'},
       {if:'surface == GROUND',      multiply_by:'0.01'},
       {if:'surface == GRASS',       multiply_by:'0.01'},
       {if:'surface == SAND',        multiply_by:'0.01'},
-      {if:'surface == FINE_GRAVEL', multiply_by:'0.01'},
-      {if:'road_class == TRACK',    multiply_by:'0.01'}
+      {if:'surface == FINE_GRAVEL', multiply_by:'0.01'}
     ]
   };
 }
