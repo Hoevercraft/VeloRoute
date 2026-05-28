@@ -486,19 +486,9 @@ async function graphhopper(body){
     type:'Feature',
     geometry: path.points,   // already GeoJSON LineString with [lon,lat,ele]
     properties:{
-  summary:{
-    distance:path.distance,
-    duration:path.time/1000
-  },
-
-  segments:[
-    {
-      ascent:path.ascend || 0
+      summary:{ distance: path.distance, duration: path.time/1000 },
+      segments:[{ ascent: path.ascend||0 }]
     }
-  ],
-
-  details:path.details || {}
-}
   };
 }
 
@@ -510,95 +500,23 @@ function roadCustomModel(){
   // road_class PATH  = highway=path/footway/bridleway (Wiesen-/Waldpfade)
   // surface-Filter fängt explizit getaggte unbefestigte Oberflächen.
   return {
-
-    distance_influence: 15,
-
-    priority: [
-
-      // ─────────────────────────────
-      // HARTE SPERRUNGEN
-      // ─────────────────────────────
-
-      { if:'road_class == TRACK', multiply_by:'0' },
-      { if:'road_class == PATH', multiply_by:'0' },
-      { if:'road_class == FOOTWAY', multiply_by:'0' },
-      { if:'road_class == BRIDLEWAY', multiply_by:'0' },
-
-      // UNKNOWN / FEHLENDE OBERFLÄCHEN
-      { if:'surface == MISSING', multiply_by:'0' },
-
-      // UNBEFESTIGT
-{ if:'surface == GRAVEL', multiply_by:'0' },
-{ if:'surface == FINE_GRAVEL', multiply_by:'0' },
-{ if:'surface == GROUND', multiply_by:'0' },
-{ if:'surface == DIRT', multiply_by:'0' },
-{ if:'surface == MUD', multiply_by:'0' },
-{ if:'surface == SAND', multiply_by:'0' },
-{ if:'surface == GRASS', multiply_by:'0' },
-
-// SCHLECHTE WEGE
-{ if:'smoothness == BAD', multiply_by:'0' },
-{ if:'smoothness == VERY_BAD', multiply_by:'0' },
-{ if:'smoothness == HORRIBLE', multiply_by:'0' },
-{ if:'smoothness == VERY_HORRIBLE', multiply_by:'0' },
-
-      // TRACKS NUR GRADE1
-      { if:'track_type != GRADE1', multiply_by:'0' },
-
-      // ─────────────────────────────
-      // LEICHTE VERMEIDUNG GROSSER STRASSEN
-      // ─────────────────────────────
-
-      { if:'road_class == PRIMARY', multiply_by:'0.85' },
-
-      // ─────────────────────────────
-      // GUTE STRASSEN BEVORZUGEN
-      // ─────────────────────────────
-
-      { if:'road_class == SECONDARY', multiply_by:'1.15' },
-      { if:'road_class == TERTIARY', multiply_by:'1.25' },
-      { if:'road_class == RESIDENTIAL', multiply_by:'1.3' },
-
-      // ─────────────────────────────
-      // ASPHALTIERTE RADWEGE
-      // ─────────────────────────────
-
-      { if:'road_class == CYCLEWAY && surface == ASPHALT', multiply_by:'1.45' },
-      { if:'road_class == CYCLEWAY && surface == PAVED', multiply_by:'1.35' },
-      { if:'road_class == CYCLEWAY && smoothness == EXCELLENT', multiply_by:'1.5' },
-
-      // ─────────────────────────────
-      // PFLASTER
-      // ─────────────────────────────
-
-      { if:'surface == COBBLESTONE', multiply_by:'0.7' },
-      { if:'surface == SETT', multiply_by:'0.7' },
-
-      // ─────────────────────────────
-      // RUHIGE STRASSEN
-      // ─────────────────────────────
-
-      { if:'road_environment == TUNNEL', multiply_by:'0.7' }
-
+    speed:[
+      {if:'road_class == TRACK',    limit_to:'2'},
+      {if:'road_class == PATH',     limit_to:'2'},
+      {if:'surface == GRAVEL',      limit_to:'2'},
+      {if:'surface == GROUND',      limit_to:'2'},
+      {if:'surface == GRASS',       limit_to:'2'},
+      {if:'surface == SAND',        limit_to:'2'},
+      {if:'surface == FINE_GRAVEL', limit_to:'2'}
     ],
-
-    speed: [
-
-      // KOMPLETT UNATTRAKTIV
-      { if:'road_class == TRACK', limit_to:'1' },
-      { if:'road_class == PATH', limit_to:'1' },
-
-      { if:'surface == GRAVEL', limit_to:'1' },
-      { if:'surface == FINE_GRAVEL', limit_to:'1' },
-      { if:'surface == DIRT', limit_to:'1' },
-      { if:'surface == GROUND', limit_to:'1' },
-      { if:'surface == SAND', limit_to:'1' },
-      { if:'surface == GRASS', limit_to:'1' },
-
-      // PFLASTER LANGSAMER
-      { if:'surface == COBBLESTONE', limit_to:'12' },
-      { if:'surface == SETT', limit_to:'12' }
-
+    priority:[
+      {if:'road_class == TRACK',    multiply_by:'0.01'},
+      {if:'road_class == PATH',     multiply_by:'0.01'},
+      {if:'surface == GRAVEL',      multiply_by:'0.01'},
+      {if:'surface == GROUND',      multiply_by:'0.01'},
+      {if:'surface == GRASS',       multiply_by:'0.01'},
+      {if:'surface == SAND',        multiply_by:'0.01'},
+      {if:'surface == FINE_GRAVEL', multiply_by:'0.01'}
     ]
   };
 }
@@ -623,110 +541,45 @@ async function ors(profile, body){
 }
 
 async function roundtrip(coord, distKm){
-
-  if(S.bike === 'road'){
-
-    // Rennrad
+  if(S.bike==='road'){
+    // GraphHopper round trip — Rennrad, nur Asphalt
     return graphhopper({
-
       points:[coord],
-
       profile:'bike',
-
       algorithm:'round_trip',
-
-      'round_trip.distance': distKm * 1000,
+      'round_trip.distance': distKm*1000,
       'round_trip.seed': S.seed,
-
       points_encoded:false,
       elevation:true,
-
-      details:[
-        'surface',
-        'road_class',
-        'smoothness',
-        'track_type',
-        'road_environment'
-      ],
-
       custom_model: roadCustomModel()
     });
-
   } else {
-
-// Gravel
-return ors('cycling-mountain',{
-
-  coordinates:[coord],
-
-  options:{
-
-    avoid_features:[
-      'steps',
-      'ferries'
-    ],
-
-    profile_params:{
-      weightings:{
-        green:0.9,
-        quiet:0.5
-      }
-    },
-
-    round_trip:{
-      length:distKm * 1000,
-      points:6,
-      seed:S.seed
-    }
-  },
-
-  elevation:true
-});
+    // ORS — Gravel, Waldwege bevorzugen
+    return ors('cycling-mountain',{
+      coordinates:[coord],
+      options:{
+        avoid_features:['steps','ferries'],
+        profile_params:{ weightings:{ green:0.6, quiet:0.3 } },
+        round_trip:{ length:distKm*1000, points:5, seed:S.seed }
+      },
+      elevation:true
+    });
   }
 }
 
-
 async function waypoints(coords){
-
-  if(S.bike === 'road'){
-
+  if(S.bike==='road'){
     return graphhopper({
-
       points:coords,
-
       profile:'bike',
-
       points_encoded:false,
       elevation:true,
-
-      details:[
-        'surface',
-        'road_class',
-        'smoothness',
-        'track_type',
-        'road_environment'
-      ],
-
       custom_model: roadCustomModel()
     });
-
   } else {
-
     return ors('cycling-mountain',{
-
       coordinates:coords,
-
-      options:{
-        avoid_features:['steps','ferries'],
-
-        profile_params:{
-          weightings:{
-            green:0.9,
-            quiet:0.5
-          }
-        }
-      },
-
+      options:{ avoid_features:['steps','ferries'], profile_params:{ weightings:{ green:0.6, quiet:0.3 } } },
       elevation:true
     });
   }
@@ -807,40 +660,6 @@ function renderRoute(feature){
 // RESULTS UI
 // ══════════════════════════════════════════
 function showResults(f){
-  const analysis = analyzeSurface(f);
-
-if(analysis){
-  const html = `
-    <div style="margin-top:12px">
-
-      <div style="
-        font-size:10px;
-        color:#64748b;
-        text-transform:uppercase;
-        letter-spacing:.6px;
-        margin-bottom:8px
-      ">
-        Weganalyse
-      </div>
-
-      <div style="
-        display:grid;
-        grid-template-columns:1fr 1fr;
-        gap:7px
-      ">
-
-        ${analysisBox('🛣 Asphalt', analysis.asphalt+'%','#3b82f6')}
-        ${analysisBox('🚴 Radweg', analysis.cycleway+'%','#22c55e')}
-        ${analysisBox('🌲 Gravel', analysis.gravel+'%','#f97316')}
-        ${analysisBox('❓ Unbekannt', analysis.unknown+'%','#64748b')}
-
-      </div>
-
-    </div>
-  `;
-
-  let old = q('surfaceAnalysis'); if(old) old.remove(); const wrap = document.createElement('div'); wrap.id = 'surfaceAnalysis'; wrap.innerHTML = html; q('results').appendChild(wrap);
-}
   const sum = f.properties.summary;
   const segs = f.properties.segments||[];
   const distKm = (sum.distance/1000).toFixed(1);
@@ -888,105 +707,6 @@ function drawEle(coords){
     <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:10px;color:#64748b">
       <span>${Math.round(eMin)} m</span><span>↑${Math.round(eMax-eMin)} m Anstieg</span><span>${Math.round(eMax)} m</span>
     </div>`;
-}
-
-function analyzeSurface(feature){
-
-  const details = feature.properties.details;
-
-  if(!details) return null;
-
-  const surfaces = details.surface || [];
-  const roads    = details.road_class || [];
-
-  let asphalt=0;
-  let gravel=0;
-  let unknown=0;
-  let cycleway=0;
-
-  let total=0;
-
-  surfaces.forEach(s => {
-
-    const len = s[1] - s[0];
-    total += len;
-
-    const val = (s[2] || '').toUpperCase();
-
-    if([
-      'ASPHALT',
-      'PAVED',
-      'CONCRETE'
-    ].includes(val)){
-      asphalt += len;
-    }
-    else if([
-      'GRAVEL',
-      'GROUND',
-      'DIRT',
-      'FINE_GRAVEL',
-      'SAND'
-    ].includes(val)){
-      gravel += len;
-    }
-    else{
-      unknown += len;
-    }
-  });
-
-  roads.forEach(r => {
-
-    const len = r[1] - r[0];
-    const val = (r[2] || '').toUpperCase();
-
-    if(val === 'CYCLEWAY'){
-      cycleway += len;
-    }
-  });
-
-  function pct(v){
-    return total
-      ? Math.round((v / total) * 100)
-      : 0;
-  }
-
-  return {
-    asphalt: pct(asphalt),
-    gravel: pct(gravel),
-    unknown: pct(unknown),
-    cycleway: pct(cycleway)
-  };
-}
-
-function analysisBox(label,val,color){
-
-  return `
-    <div style="
-      background:#1a2336;
-      border:1px solid #253048;
-      border-radius:8px;
-      padding:10px
-    ">
-
-      <div style="
-        font-size:11px;
-        color:#64748b;
-        margin-bottom:4px
-      ">
-        ${label}
-      </div>
-
-      <div style="
-        font-family:'Bebas Neue',sans-serif;
-        font-size:24px;
-        color:${color};
-        letter-spacing:1px
-      ">
-        ${val}
-      </div>
-
-    </div>
-  `;
 }
 
 // ══════════════════════════════════════════
@@ -1104,56 +824,32 @@ function brng(la1,lo1,la2,lo2){
 // handelt es sich um einen sinnlosen Abstecher.
 // ══════════════════════════════════════════
 function removeBacktracks(coords){
-
-  const SNAP_KM   = 0.10;
-  const MAX_SPIKE = 3.5;
-  const LOOK      = 150;
+  const SNAP_KM   = 0.07;  // 70 m — gilt als "gleicher Ort"
+  const MAX_SPIKE = 1.8;   // Abstecher bis 1,8 km werden entfernt
+  const LOOK      = 100;   // Suchfenster (Performance)
 
   let pts = coords.slice();
-
   let changed = true;
-
   while(changed){
-
     changed = false;
-
     outer:
-    for(let i = 0; i < pts.length - 5; i++){
-
-      for(let j = i + 5; j < Math.min(i + LOOK, pts.length); j++){
-
-        const close =
-          hav(
-            pts[i][1],pts[i][0],
-            pts[j][1],pts[j][0]
-          ) < SNAP_KM;
-
-        if(!close) continue;
-
-        let len = 0;
-
-        for(let k = i; k < j; k++){
-
-          len += hav(
-            pts[k][1],pts[k][0],
-            pts[k+1][1],pts[k+1][0]
-          );
-
-          if(len > MAX_SPIKE) break;
-        }
-
-        if(len <= MAX_SPIKE){
-
-          pts.splice(i + 1, j - i);
-
-          changed = true;
-
-          break outer;
+    for(let i = 0; i < pts.length - 3; i++){
+      for(let j = i + 3; j < Math.min(i + LOOK, pts.length); j++){
+        if(hav(pts[i][1],pts[i][0], pts[j][1],pts[j][0]) < SNAP_KM){
+          let len = 0;
+          for(let k = i; k < j; k++){
+            len += hav(pts[k][1],pts[k][0], pts[k+1][1],pts[k+1][0]);
+            if(len > MAX_SPIKE) break;
+          }
+          if(len <= MAX_SPIKE){
+            pts.splice(i + 1, j - i);
+            changed = true;
+            break outer;
+          }
         }
       }
     }
   }
-
   return pts;
 }
 
