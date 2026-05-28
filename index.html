@@ -144,6 +144,19 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
 .leg-item:last-child{margin-bottom:0}
 .leg-line{width:24px;height:3px;border-radius:2px}
 
+/* ── SURFACE ANALYSIS ── */
+.surf-wrap{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:11px;margin-bottom:10px;display:none}
+.surf-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.surf-bar{display:flex;height:10px;border-radius:5px;overflow:hidden;margin-bottom:10px;gap:1px}
+.surf-seg{height:100%;transition:width .5s ease;min-width:2px}
+.surf-list{display:flex;flex-direction:column;gap:5px}
+.surf-item{display:flex;align-items:center;gap:7px}
+.surf-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.surf-name{font-size:11px;color:var(--text);flex:1;text-transform:capitalize}
+.surf-pct{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.surf-km{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:42px;text-align:right}
+.surf-no{font-size:11px;color:var(--muted);font-style:italic}
+
 /* Leaflet theme */
 .leaflet-popup-content-wrapper{background:#1a2336;color:#e2e8f0;border:1px solid #253048;border-radius:10px}
 .leaflet-popup-tip{background:#1a2336}
@@ -259,6 +272,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
       <div class="ele-wrap" id="eleWrap">
         <div class="ele-lbl">Höhenprofil</div>
         <div id="eleChart"></div>
+      </div>
+      <div class="surf-wrap" id="surfWrap">
+        <div class="surf-lbl">Untergrundanalyse</div>
+        <div class="surf-bar" id="surfBar"></div>
+        <div class="surf-list" id="surfList"></div>
       </div>
       <div class="acts">
         <button class="btn btn-g" onclick="exportGPX()">⬇ Als GPX herunterladen</button>
@@ -497,13 +515,14 @@ async function graphhopper(body){
   const data = await res.json();
   if(!data.paths?.length) throw new Error('Keine Route gefunden. Bitte anderen Startpunkt wählen.');
   const path = data.paths[0];
-  // GH-Response → ORS-ähnliches GeoJSON Feature
+  const surfBreakdown = parseSurfaceDetails(path);
   return {
     type:'Feature',
-    geometry: path.points,   // already GeoJSON LineString with [lon,lat,ele]
+    geometry: path.points,
     properties:{
       summary:{ distance: path.distance, duration: path.time/1000 },
-      segments:[{ ascent: path.ascend||0 }]
+      segments:[{ ascent: path.ascend||0 }],
+      surfBreakdown
     }
   };
 }
@@ -615,6 +634,7 @@ async function roundtrip(coord, distKm){
       'round_trip.seed': S.seed,
       points_encoded:false,
       elevation:true,
+      details:['surface'],
       custom_model: roadCustomModel()
     });
   } else if(S.bike==='hardcore'){
@@ -626,6 +646,7 @@ async function roundtrip(coord, distKm){
       'round_trip.seed': S.seed,
       points_encoded:false,
       elevation:true,
+      details:['surface'],
       custom_model: hardcoreGravelCustomModel()
     });
   } else if(S.bike==='hardcore'){
@@ -638,6 +659,7 @@ async function roundtrip(coord, distKm){
       'round_trip.seed': S.seed,
       points_encoded:false,
       elevation:true,
+      details:['surface'],
       custom_model: hardcoreGravelCustomModel()
     });
   } else {
@@ -661,6 +683,7 @@ async function waypoints(coords){
       profile:'bike',
       points_encoded:false,
       elevation:true,
+      details:['surface'],
       custom_model: roadCustomModel()
     });
   } else if(S.bike==='hardcore'){
@@ -669,6 +692,7 @@ async function waypoints(coords){
       profile:'bike',
       points_encoded:false,
       elevation:true,
+      details:['surface'],
       custom_model: hardcoreGravelCustomModel()
     });
   } else if(S.bike==='hardcore'){
@@ -677,6 +701,7 @@ async function waypoints(coords){
       profile:'bike',
       points_encoded:false,
       elevation:true,
+      details:['surface'],
       custom_model: hardcoreGravelCustomModel()
     });
   } else {
@@ -782,6 +807,7 @@ function showResults(f){
   if(coords[0].length>=3){ drawEle(coords); q('eleWrap').style.display='block'; }
   else q('eleWrap').style.display='none';
 
+  drawSurface(f.properties.surfBreakdown||null);
   q('results').classList.add('on');
 }
 
@@ -901,6 +927,108 @@ function exitEdit(){
   q('editBar').classList.remove('on');
   S.em.forEach(m=>S.map.removeLayer(m));
   S.em=[];
+}
+
+
+// ══════════════════════════════════════════
+// SURFACE ANALYSIS
+// ══════════════════════════════════════════
+const SURF_COLORS = {
+  asphalt:      '#64748b',
+  paved:        '#94a3b8',
+  concrete:     '#7c8fa8',
+  paving_stones:'#a8a29e',
+  gravel:       '#d97706',
+  fine_gravel:  '#f59e0b',
+  compacted:    '#b45309',
+  ground:       '#92400e',
+  dirt:         '#a16207',
+  sand:         '#fbbf24',
+  grass:        '#22c55e',
+  grass_paver:  '#4ade80',
+  mud:          '#78350f',
+  wood:         '#a3704e',
+  metal:        '#6b7280',
+  cobblestone:  '#9ca3af',
+  sett:         '#9ca3af',
+  unknown:      '#475569',
+  other:        '#475569',
+};
+
+const SURF_DE = {
+  asphalt:      'Asphalt',
+  paved:        'Befestigt',
+  concrete:     'Beton',
+  paving_stones:'Pflaster',
+  gravel:       'Schotter',
+  fine_gravel:  'Feiner Schotter',
+  compacted:    'Verdichtet',
+  ground:       'Boden (unbefestigt)',
+  dirt:         'Erde',
+  sand:         'Sand',
+  grass:        'Gras',
+  grass_paver:  'Rasengitter',
+  mud:          'Matsch',
+  wood:         'Holz',
+  metal:        'Metall',
+  cobblestone:  'Kopfsteinpflaster',
+  sett:         'Großpflaster',
+  unknown:      'Unbekannt',
+  other:        'Sonstiges',
+};
+
+function parseSurfaceDetails(path){
+  // GH details.surface = [[fromIdx, toIdx, "surface_name"], ...]
+  const segs = path.details?.surface;
+  const coords = path.points?.coordinates;
+  if(!segs || !coords) return null;
+
+  const distPerSurf = {};
+  for(const [from, to, surf] of segs){
+    let d = 0;
+    for(let i = from; i < to && i+1 < coords.length; i++){
+      d += hav(coords[i][1], coords[i][0], coords[i+1][1], coords[i+1][0]);
+    }
+    const key = (surf||'unknown').toLowerCase().replace(/ /g,'_');
+    distPerSurf[key] = (distPerSurf[key]||0) + d;
+  }
+  return distPerSurf;
+}
+
+function drawSurface(breakdown){
+  const wrap = q('surfWrap');
+  if(!breakdown){ wrap.style.display='none'; return; }
+
+  const total = Object.values(breakdown).reduce((a,b)=>a+b, 0);
+  if(total < 0.01){ wrap.style.display='none'; return; }
+
+  // Sort by distance desc
+  const entries = Object.entries(breakdown).sort((a,b)=>b[1]-a[1]);
+
+  // Bar
+  const bar = q('surfBar');
+  bar.innerHTML = entries.map(([k,d])=>{
+    const pct = (d/total*100).toFixed(1);
+    const col = SURF_COLORS[k]||SURF_COLORS.other;
+    return `<div class="surf-seg" style="width:${pct}%;background:${col}" title="${SURF_DE[k]||k}: ${pct}%"></div>`;
+  }).join('');
+
+  // List
+  const list = q('surfList');
+  list.innerHTML = entries.map(([k,d])=>{
+    const pct = (d/total*100).toFixed(0);
+    const km  = d.toFixed(1);
+    const col = SURF_COLORS[k]||SURF_COLORS.other;
+    const lbl = SURF_DE[k]||k;
+    return `<div class="surf-item">
+      <div class="surf-dot" style="background:${col}"></div>
+      <div class="surf-name">${lbl}</div>
+      <div class="surf-pct">${pct}%</div>
+      <div class="surf-km">${km} km</div>
+    </div>`;
+  }).join('');
+
+  wrap.style.display = 'block';
 }
 
 // ══════════════════════════════════════════
