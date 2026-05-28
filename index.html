@@ -325,7 +325,7 @@ window.addEventListener('DOMContentLoaded', () => {
   if(S.key){ q('apiIn').value = S.key; dot('ok'); }
 
   q('apiIn').addEventListener('change', e => {
-    S.key = e.target.value.trim();
+    S.key = e.target.value.replace(/[^ -~]/g, '').trim();
     localStorage.setItem('vr_key', S.key);
     dot(S.key ? 'ok' : '');
   });
@@ -445,7 +445,7 @@ function bikeOpts(extra={}){
     // avoid_features: fords + steps zusätzlich ausschließen.
     // green:0 → keine Wald-/Naturwege, quiet:0.1 minimal.
     return {
-      avoid_features:['steps','ferries','fords'],
+      avoid_features:['steps','ferries','fords','unpavedroads'],
       profile_params:{
         weightings:{
           green:0.0,
@@ -486,7 +486,7 @@ async function waypoints(coords){
 async function ors(profile, body){
   const res = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}/geojson`, {
     method:'POST',
-    headers:{ 'Authorization':S.key, 'Content-Type':'application/json' },
+    headers:{ 'Authorization':S.key.replace(/[^ -~]/g,'').trim(), 'Content-Type':'application/json' },
     body:JSON.stringify(body)
   });
   if(!res.ok){
