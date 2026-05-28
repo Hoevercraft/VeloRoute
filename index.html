@@ -556,27 +556,6 @@ function roadCustomModel(){
   };
 }
 
-// ── GRAPHHOPPER (Hardcore Gravel — unbefestigt priorisiert) ──
-// Invertierte Logik: Asphalt/Beton wird bestraft → GRAVEL, GROUND, SAND, FINE_GRAVEL
-// behalten volle Priorität (1.0) und werden damit vom Algorithmus bevorzugt.
-// mountain_bike-Profil = technisch für raues Gelände ausgelegt.
-function hardcoreGravelCustomModel(){
-  return {
-    priority:[
-      // Befestigte Oberflächen stark bestrafen
-      {if:'surface == ASPHALT',       multiply_by:'0.1'},
-      {if:'surface == CONCRETE',      multiply_by:'0.1'},
-      {if:'surface == PAVING_STONES', multiply_by:'0.15'},
-      {if:'surface == COBBLESTONE',   multiply_by:'0.2'},
-      // Schnellstraßen meiden — Hardcore bleibt auf Nebenwegen
-      {if:'road_class == MOTORWAY',   multiply_by:'0.01'},
-      {if:'road_class == TRUNK',      multiply_by:'0.05'},
-      {if:'road_class == PRIMARY',    multiply_by:'0.15'},
-      {if:'road_class == SECONDARY',  multiply_by:'0.3'}
-      // GRAVEL, GROUND, SAND, FINE_GRAVEL, TRACK, PATH behalten Prio 1.0 → bevorzugt
-    ]
-  };
-}
 
 
 // ── GRAPHHOPPER (Hardcore Gravel — unbefestigt priorisiert) ──
@@ -732,18 +711,6 @@ async function roundtrip(coord, distKm){
       elevation:true,
       details:['surface'],
       custom_model: roadCustomModel()
-    });
-  } else if(S.bike==='hardcore'){
-    return graphhopper({
-      points:[coord],
-      profile:'bike',
-      algorithm:'round_trip',
-      'round_trip.distance': distKm*1000,
-      'round_trip.seed': S.seed,
-      points_encoded:false,
-      elevation:true,
-      details:['surface'],
-      custom_model: hardcoreGravelCustomModel()
     });
   } else if(S.bike==='hardcore'){
     return await hardcoreRoundtrip(coord, distKm);
