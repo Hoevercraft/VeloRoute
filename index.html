@@ -811,22 +811,51 @@ async function waypoints(coords){
 async function planShade(){
   const [lo,la] = S.coord;
   const radius = Math.min(S.dist*180, 40000);
-  let forests = [];
+  let shadePoints = [];
   setStatus('Suche schattige Wege…');
-  try { forests = await queryForests(la,lo,radius); } catch{}
 
-  if(forests.length>=2){
-    const wps = pickShadeWps(lo,la,forests,S.dist);
+  if(S.bike==='road'){
+    // Rennrad: NUR Parks — haben befestigte Wege, keine Wald-/Sandpfade
+    try { shadePoints = await queryParks(la,lo,radius); } catch{}
+  } else {
+    // Gravel/Hardcore: Wälder + Parks
+    try { shadePoints = await queryForests(la,lo,radius); } catch{}
+  }
+
+  if(shadePoints.length>=2){
+    const wps = pickShadeWps(lo,la,shadePoints,S.dist);
     if(wps.length>=2){
       try { return await waypoints([S.coord,...wps,S.coord]); } catch{}
     }
   }
-  // Fallback: normal roundtrip (with note)
+  // Fallback: normaler Rundkurs
   return roundtrip(S.coord, S.dist);
 }
 
+// Parks: befestigte Wege, schattige Alleen — sicher für Rennrad
+async function queryParks(la,lo,rm){
+  const q = `[out:json][timeout:12];(
+    way["leisure"="park"](around:${rm},${la},${lo});
+    way["landuse"="recreation_ground"](around:${rm},${la},${lo});
+    relation["leisure"="park"](around:${rm},${la},${lo});
+  );out center qt 80;`;
+  const res = await fetch('https://overpass-api.de/api/interpreter',{
+    method:'POST', body:'data='+encodeURIComponent(q)
+  });
+  if(!res.ok) throw new Error('Overpass error');
+  const d = await res.json();
+  return d.elements.filter(e=>e.center||e.lat).map(e=>e.center?[e.center.lon,e.center.lat]:[e.lon,e.lat]);
+}
+
+// Wälder + Parks: für Gravel/Hardcore
 async function queryForests(la,lo,rm){
-  const q = `[out:json][timeout:12];(way["landuse"="forest"](around:${rm},${la},${lo});way["natural"="wood"](around:${rm},${la},${lo});relation["landuse"="forest"](around:${rm},${la},${lo});relation["natural"="wood"](around:${rm},${la},${lo});way["leisure"="park"](around:${rm},${la},${lo}););out center qt 80;`;
+  const q = `[out:json][timeout:12];(
+    way["landuse"="forest"](around:${rm},${la},${lo});
+    way["natural"="wood"](around:${rm},${la},${lo});
+    relation["landuse"="forest"](around:${rm},${la},${lo});
+    relation["natural"="wood"](around:${rm},${la},${lo});
+    way["leisure"="park"](around:${rm},${la},${lo});
+  );out center qt 80;`;
   const res = await fetch('https://overpass-api.de/api/interpreter',{
     method:'POST', body:'data='+encodeURIComponent(q)
   });
