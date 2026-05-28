@@ -656,19 +656,32 @@ async function roundtrip(coord, distKm){
 
   } else {
 
-    // Gravel
-return graphhopper({
+// Gravel
+return ors('cycling-mountain',{
 
-  points:[coord],
+  coordinates:[coord],
 
-  profile:'gravelbike',
+  options:{
 
-  algorithm:'round_trip',
+    avoid_features:[
+      'steps',
+      'ferries'
+    ],
 
-  'round_trip.distance': distKm * 1000,
-  'round_trip.seed': S.seed,
+    profile_params:{
+      weightings:{
+        green:0.9,
+        quiet:0.5
+      }
+    },
 
-  points_encoded:false,
+    round_trip:{
+      length:distKm * 1000,
+      points:6,
+      seed:S.seed
+    }
+  },
+
   elevation:true
 });
   }
