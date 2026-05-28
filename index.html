@@ -622,6 +622,85 @@ function hardcoreGravelCustomModel(){
   };
 }
 
+// ── HARDCORE ROUNDTRIP: Waldwegpunkte erzwingen ──
+// Strategie: Overpass liefert Waldgebiete → Zentroide als Pflicht-Wegpunkte.
+// Route wird durch den Wald gezogen, Kanalwege fallen raus.
+async function hardcoreRoundtrip(coord, distKm){
+  const [lo, la] = coord;
+  const radius = Math.min(distKm * 200, 50000);
+  let forestWps = [];
+  try { forestWps = await queryForestWps(la, lo, radius, distKm); } catch(e){}
+
+  if(forestWps.length >= 2){
+    try {
+      return await graphhopper({
+        points: [coord, ...forestWps, coord],
+        profile: 'bike',
+        points_encoded: false,
+        elevation: true,
+        details: ['surface'],
+        custom_model: hardcoreGravelCustomModel()
+      });
+    } catch(e){}
+  }
+  // Fallback: einfacher Round-Trip ohne Waldpunkte
+  return graphhopper({
+    points: [coord],
+    profile: 'bike',
+    algorithm: 'round_trip',
+    'round_trip.distance': distKm * 1000,
+    'round_trip.seed': S.seed,
+    points_encoded: false,
+    elevation: true,
+    details: ['surface'],
+    custom_model: hardcoreGravelCustomModel()
+  });
+}
+
+async function queryForestWps(la, lo, rm, distKm){
+  // Wald- und Naturgebiete abfragen (kein Kanal/Wasser)
+  const qry = `[out:json][timeout:15];(
+    way["landuse"="forest"](around:${rm},${la},${lo});
+    way["natural"="wood"](around:${rm},${la},${lo});
+    relation["landuse"="forest"](around:${rm},${la},${lo});
+    relation["natural"="wood"](around:${rm},${la},${lo});
+  );out center qt 120;`;
+  const res = await fetch('https://overpass-api.de/api/interpreter',{
+    method:'POST', body:'data='+encodeURIComponent(qry)
+  });
+  if(!res.ok) throw new Error('Overpass error');
+  const d = await res.json();
+  const forests = d.elements
+    .filter(e => e.center || (e.lat && e.lon))
+    .map(e => e.center ? [e.center.lon, e.center.lat] : [e.lon, e.lat]);
+
+  if(!forests.length) return [];
+
+  // 3 Wegpunkte in gleichmäßigen Winkeln (120°) um den Start verteilen
+  // Abstand: ~distKm/4 vom Start — ergibt harmonische Rundform
+  const targetDist = distKm / 4;
+  const wps = [0, 1, 2].map(i => {
+    const angle = (i * 120 + 30) % 360; // 30°, 150°, 270°
+    // Kandidaten im richtigen Winkelsektor und passender Entfernung
+    const cands = forests.filter(([fLo, fLa]) => {
+      const b = brng(la, lo, fLa, fLo);
+      const dist = hav(la, lo, fLa, fLo);
+      const angleDiff = Math.abs(((b - angle + 540) % 360) - 180);
+      return angleDiff < 55 && dist > targetDist * 0.3 && dist < targetDist * 2.5;
+    });
+    if(!cands.length) return null;
+    // Nächsten zum Zielabstand wählen
+    cands.sort((a, b_) =>
+      Math.abs(hav(la,lo,a[1],a[0]) - targetDist) -
+      Math.abs(hav(la,lo,b_[1],b_[0]) - targetDist)
+    );
+    return cands[0];
+  }).filter(Boolean);
+
+  return wps;
+}
+
+
 // ── ORS (Gravel) ──
 async function ors(profile, body){
   const res = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}/geojson`, {
@@ -667,18 +746,7 @@ async function roundtrip(coord, distKm){
       custom_model: hardcoreGravelCustomModel()
     });
   } else if(S.bike==='hardcore'){
-    // GraphHopper mountain_bike — Schotter/Unbefestigt bevorzugt
-    return graphhopper({
-      points:[coord],
-      profile:'bike',
-      algorithm:'round_trip',
-      'round_trip.distance': distKm*1000,
-      'round_trip.seed': S.seed,
-      points_encoded:false,
-      elevation:true,
-      details:['surface'],
-      custom_model: hardcoreGravelCustomModel()
-    });
+    return await hardcoreRoundtrip(coord, distKm);
   } else {
     // ORS — Gravel, Waldwege bevorzugen
     return ors('cycling-mountain',{
