@@ -554,18 +554,21 @@ async function graphhopper(body){
   });
 
   // Rate-Limit-Header auslesen
-  const remaining = parseInt(res.headers.get('X-RateLimit-Remaining') ?? '999');
-  const resetSec  = parseInt(res.headers.get('X-RateLimit-Reset')     ?? '0');
+  // X-RateLimit-Reset ist ein Unix-Timestamp (Sek. seit 1970) → Delta berechnen
+  const remaining    = parseInt(res.headers.get('X-RateLimit-Remaining') ?? '999');
+  const resetStamp   = parseInt(res.headers.get('X-RateLimit-Reset')     ?? '0');
+  const nowSec       = Math.floor(Date.now() / 1000);
+  const resetDeltaSec = resetStamp > nowSec ? resetStamp - nowSec : 0;
 
   if(!res.ok){
     const e = await res.json().catch(()=>({}));
     const msg = e?.message||e?.hints?.[0]?.message||'';
     if(res.status===401||res.status===403) throw new Error('Ungültiger GraphHopper Key. Bitte auf graphhopper.com/dashboard prüfen.');
     if(res.status===429){
-      // Exponential Backoff: Wartezeit = resetSec aus Header, sonst 2^attempt * 3s
       _ghBackoff.attempt++;
-      const waitSec = resetSec > 0
-        ? resetSec
+      // Header-Delta bevorzugen, sonst Exponential Backoff (min. 5s)
+      const waitSec = resetDeltaSec > 0
+        ? resetDeltaSec
         : Math.min(Math.pow(2, _ghBackoff.attempt) * 3, 60);
       _ghBackoff.resetAt = Date.now() + waitSec * 1000;
       startRateLimitCountdown(waitSec);
@@ -576,10 +579,10 @@ async function graphhopper(body){
 
   // Wenn weniger als 5 Credits übrig → kleine Präventiv-Pause einbauen
   if(remaining < 5 && remaining > 0){
-    const pauseSec = resetSec > 0 ? resetSec : 10;
+    const pauseSec = resetDeltaSec > 0 ? resetDeltaSec : 10;
     _ghBackoff.resetAt = Date.now() + pauseSec * 1000;
   } else {
-    _ghBackoff.attempt = 0; // Reset bei Erfolg
+    _ghBackoff.attempt = 0;
   }
   const data = await res.json();
   if(!data.paths?.length) throw new Error('Keine Route gefunden. Bitte anderen Startpunkt wählen.');
