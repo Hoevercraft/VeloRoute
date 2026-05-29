@@ -131,12 +131,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
 .tile-tog{top:12px;right:50px;background:rgba(17,24,39,.92);border:1px solid var(--border);border-radius:8px;padding:4px;display:flex;gap:2px;backdrop-filter:blur(8px)}
 .t-btn{padding:4px 10px;border-radius:5px;font-size:11px;font-weight:500;border:none;background:transparent;color:var(--muted);cursor:pointer;transition:all .15s}
 .t-btn.on{background:var(--accent);color:#000}
-.edit-bar{top:0;left:0;right:0;background:rgba(245,158,11,.97);color:#000;padding:10px 14px;display:none;align-items:center;gap:10px;font-size:13px;font-weight:500}
-.edit-bar.on{display:flex}
-.eb-txt{flex:1;font-size:12px}
-.sm-btn{padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;white-space:nowrap;transition:all .15s}
-.sm-dark{background:rgba(0,0,0,.2);color:#000}.sm-dark:hover{background:rgba(0,0,0,.35)}
-.sm-solid{background:#000;color:#fff}.sm-solid:hover{background:#1a1a1a}
+
 .hint-wrap{inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
 .hint-card{background:rgba(17,24,39,.9);border:1px solid var(--border);border-radius:14px;padding:18px 24px;text-align:center;font-size:14px;color:var(--muted);line-height:1.8;backdrop-filter:blur(8px)}
 .hint-card strong{color:var(--text)}
@@ -287,10 +282,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
       </div>
       <div class="acts">
         <button class="btn btn-g" onclick="exportGPX()">⬇ Als GPX herunterladen</button>
-        <div class="btn-2">
-          <button class="btn btn-q" onclick="enterEdit()">✏️ Anpassen</button>
-          <button class="btn btn-q" onclick="newVariant()">🔀 Neue Route</button>
-        </div>
+        <button class="btn btn-q" onclick="newVariant()">🔀 Neue Route</button>
       </div>
     </div>
 
@@ -303,13 +295,6 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
     <div class="mover tile-tog">
       <button class="t-btn on" id="tOsm" onclick="setTile('osm')">Karte</button>
       <button class="t-btn" id="tTopo" onclick="setTile('topo')">Topo</button>
-    </div>
-
-    <!-- Edit bar -->
-    <div class="mover edit-bar" id="editBar">
-      <div class="eb-txt">✏️ <strong>Bearbeitungsmodus</strong> — Ziehe die Marker oder klicke auf die Karte für neue Wegpunkte. Doppelklick auf Marker entfernt ihn.</div>
-      <button class="sm-btn sm-solid" onclick="applyEdit()">✓ Aktualisieren</button>
-      <button class="sm-btn sm-dark" onclick="exitEdit()">✕ Abbrechen</button>
     </div>
 
     <!-- Hint -->
@@ -339,13 +324,11 @@ const S = {
   hot: false,
   route: null,
   seed: rnd(),
-  mode: 'plan',
   map: null,
   tiles: {},
   tile: 'osm',
   rg: null,
   sm: null,
-  em: [],
 };
 function rnd(){ return Math.floor(Math.random()*9999); }
 function sanitize(v){ return v.replace(/[^ -~]/g,'').trim(); }
@@ -365,7 +348,6 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   S.rg = L.layerGroup().addTo(S.map);
-  S.map.on('click', onMapClick);
 
   if(S.keyGH){  q('apiInGH').value = S.keyGH;  dotGH('ok');  }
   if(S.keyORS){ q('apiIn').value   = S.keyORS; dotORS('ok'); }
@@ -1177,54 +1159,11 @@ function newVariant(){ S.seed=rnd(); planRoute(); }
 // ══════════════════════════════════════════
 // EDIT MODE
 // ══════════════════════════════════════════
-function enterEdit(){
-  S.mode='edit';
-  q('editBar').classList.add('on');
-  const coords = S.route.geometry.coordinates;
-  [.25,.5,.75].forEach(pct => {
-    const c = coords[Math.floor(pct*coords.length)];
-    addEditMark([c[1],c[0]]);
-  });
-}
 
-function mkEditIcon(){
-  return L.divIcon({
-    html:`<div title="Ziehen · Doppelklick zum Entfernen" style="width:22px;height:22px;background:#f59e0b;border:3px solid #fff;border-radius:50%;cursor:grab;box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center">
-      <svg width="9" height="9" viewBox="0 0 9 9" fill="white"><circle cx="2.2" cy="2.2" r="1.1"/><circle cx="6.8" cy="2.2" r="1.1"/><circle cx="2.2" cy="6.8" r="1.1"/><circle cx="6.8" cy="6.8" r="1.1"/></svg></div>`,
-    className:'', iconSize:[22,22], iconAnchor:[11,11]
-  });
-}
 
-function addEditMark(latlng){
-  const mk = L.marker(latlng,{draggable:true,icon:mkEditIcon()}).addTo(S.map);
-  mk.on('dblclick', e=>{ L.DomEvent.stop(e); S.map.removeLayer(mk); S.em=S.em.filter(m=>m!==mk); });
-  S.em.push(mk);
-}
 
-function onMapClick(e){ if(S.mode==='edit') addEditMark([e.latlng.lat,e.latlng.lng]); }
 
-async function applyEdit(){
-  loading(true);
-  try {
-    const wps = S.em.map(m=>{ const p=m.getLatLng(); return [p.lng,p.lat]; });
-    const raw = await waypoints([S.coord,...wps,S.coord]);
-    const feature = cleanRoute(raw);
-    S.route=feature;
-    renderRoute(feature);
-    showResults(feature);
-    exitEdit();
-  } catch(e){
-    err('routeErr','Bearbeitung fehlgeschlagen: '+(e.message||'Fehler'));
-    exitEdit();
-  } finally { loading(false); }
-}
-
-function exitEdit(){
-  S.mode='review';
-  q('editBar').classList.remove('on');
-  S.em.forEach(m=>S.map.removeLayer(m));
-  S.em=[];
-}
+async 
 
 
 // ══════════════════════════════════════════
