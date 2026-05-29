@@ -494,7 +494,7 @@ async function planRoute(){
     // Wenn die Route mehr als 10 km über der Zieldistanz liegt,
     // wird der Hint proportional nach unten skaliert und neu berechnet.
     const MAX_OVER_KM = 10;
-    const MAX_TRIES   = 3;
+    const MAX_TRIES   = 2;
     let hintDist = S.dist;
     let feature;
 
@@ -869,7 +869,7 @@ async function roundtrip(coord, distKm){
   if(S.bike==='road'){
     // Bis zu 3 Versuche mit verschiedenen Seeds — verwirft Routen
     // mit zu vielen "missing surface" Segmenten (Feld-/Schotterwege)
-    const MAX_SURFACE_TRIES = 3;
+    const MAX_SURFACE_TRIES = 2;
     for(let t = 0; t < MAX_SURFACE_TRIES; t++){
       const seed = t === 0 ? S.seed : rnd();
       if(t > 0){
