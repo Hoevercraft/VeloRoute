@@ -549,48 +549,32 @@ async function graphhopper(body){
 }
 
 function roadCustomModel(){
-  // Allowlist-Strategie mit else_if/else:
-  // Bekannte gepflasterte Oberflächen → bevorzugt
-  // Bekannte unbefestigte Oberflächen → hart geblockt
-  // Gute Straßenklassen ohne Surface-Tag → erlaubt (wahrscheinlich asphaltiert)
-  // TRACK/PATH ohne Surface-Tag → geblockt
-  // Alles andere ohne Surface-Tag → stark benachteiligt (inkl. "missing")
+  // Doppel-Sperre: speed + priority.
+  // Explizit bekannte unbefestigte Oberflächen und Wegtypen werden
+  // mit Speed-Limit 1 km/h + Prio 0.01 praktisch gesperrt.
+  // Alles andere (Asphalt, befestigte Straßen ohne Tag) bleibt erlaubt.
   return {
-    distance_influence: 20,
-    priority:[
-      // Bekannte gepflasterte Oberflächen: boosten
-      { if:      'surface == ASPHALT',       multiply_by:'3.0'  },
-      { else_if: 'surface == CONCRETE',      multiply_by:'2.5'  },
-      { else_if: 'surface == PAVED',         multiply_by:'2.5'  },
-      { else_if: 'surface == PAVING_STONES', multiply_by:'1.5'  },
-      { else_if: 'surface == COBBLESTONE',   multiply_by:'0.7'  },
-      // Bekannte unbefestigte Oberflächen: absolut sperren
-      { else_if: 'surface == GRAVEL',        multiply_by:'0.01' },
-      { else_if: 'surface == FINE_GRAVEL',   multiply_by:'0.01' },
-      { else_if: 'surface == GROUND',        multiply_by:'0.01' },
-      { else_if: 'surface == DIRT',          multiply_by:'0.01' },
-      { else_if: 'surface == SAND',          multiply_by:'0.01' },
-      { else_if: 'surface == GRASS',         multiply_by:'0.01' },
-      { else_if: 'surface == COMPACTED',     multiply_by:'0.01' },
-      // Kein Surface-Tag → Entscheidung nach Straßenklasse:
-      // Gute Klassen → wahrscheinlich asphaltiert → erlaubt
-      { else_if: 'road_class == PRIMARY',      multiply_by:'1.4' },
-      { else_if: 'road_class == SECONDARY',    multiply_by:'1.5' },
-      { else_if: 'road_class == TERTIARY',     multiply_by:'1.6' },
-      { else_if: 'road_class == RESIDENTIAL',  multiply_by:'1.5' },
-      { else_if: 'road_class == CYCLEWAY',     multiply_by:'2.0' },
-      { else_if: 'road_class == LIVING_STREET',multiply_by:'1.2' },
-      { else_if: 'road_class == SERVICE',      multiply_by:'1.0' },
-      // TRACK/PATH ohne Surface-Tag → geblockt
-      { else_if: 'road_class == TRACK',        multiply_by:'0.01' },
-      { else_if: 'road_class == PATH',         multiply_by:'0.01' },
-      // Alles übrige ohne Surface-Tag → stark benachteiligt
-      { else:    {},                            multiply_by:'0.05' }
-    ],
     speed:[
-      // Unbefestigte Oberflächen auf 1 km/h → Route dauert ewig → Algo meidet sie
-      { if:'surface == GRAVEL || surface == FINE_GRAVEL || surface == GROUND || surface == DIRT || surface == SAND || surface == GRASS || surface == COMPACTED', limit_to:'1' },
-      { if:'road_class == TRACK || road_class == PATH', limit_to:'1' }
+      {if:'road_class == TRACK',    limit_to:'1'},
+      {if:'road_class == PATH',     limit_to:'1'},
+      {if:'surface == GRAVEL',      limit_to:'1'},
+      {if:'surface == FINE_GRAVEL', limit_to:'1'},
+      {if:'surface == GROUND',      limit_to:'1'},
+      {if:'surface == DIRT',        limit_to:'1'},
+      {if:'surface == SAND',        limit_to:'1'},
+      {if:'surface == GRASS',       limit_to:'1'},
+      {if:'surface == COMPACTED',   limit_to:'1'}
+    ],
+    priority:[
+      {if:'road_class == TRACK',    multiply_by:'0.01'},
+      {if:'road_class == PATH',     multiply_by:'0.01'},
+      {if:'surface == GRAVEL',      multiply_by:'0.01'},
+      {if:'surface == FINE_GRAVEL', multiply_by:'0.01'},
+      {if:'surface == GROUND',      multiply_by:'0.01'},
+      {if:'surface == DIRT',        multiply_by:'0.01'},
+      {if:'surface == SAND',        multiply_by:'0.01'},
+      {if:'surface == GRASS',       multiply_by:'0.01'},
+      {if:'surface == COMPACTED',   multiply_by:'0.01'}
     ]
   };
 }
