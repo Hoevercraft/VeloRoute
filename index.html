@@ -520,69 +520,26 @@ async function planRoute(){
     showResults(feature);
     q('hint').style.display = 'none';
   } catch(e){
-    if(e.message?.startsWith('__RATELIMIT__')){
-      // Countdown läuft bereits via startRateLimitCountdown()
-      // Fehlermeldung wird dort gesetzt — nichts weiter tun
-    } else {
-      err('routeErr', e.message||'Fehler bei der Routenplanung. Bitte API Key prüfen.');
-    }
+    err('routeErr', e.message||'Fehler bei der Routenplanung. Bitte API Key prüfen.');
   } finally { loading(false); }
 }
 
 // ── GRAPHHOPPER (Rennrad — strikt asphaltiert) ──
 // custom_model penalisiert unbefestigte Oberflächen mit Faktor 0.01
 // → ORS-Umgehung: GH filtert auf Netzwerk-Ebene
-// Exponential Backoff State
-const _ghBackoff = { attempt: 0, resetAt: null };
-
 async function graphhopper(body){
   const key = sanitize(S.keyGH);
-
-  // Exponential Backoff: vor dem Request prüfen ob wir warten müssen
-  if(_ghBackoff.resetAt && Date.now() < _ghBackoff.resetAt){
-    const waitSec = Math.ceil((_ghBackoff.resetAt - Date.now()) / 1000);
-    startRateLimitCountdown(waitSec);
-    await new Promise(r => setTimeout(r, _ghBackoff.resetAt - Date.now()));
-    _ghBackoff.resetAt = null;
-    _ghBackoff.attempt = 0;
-  }
-
   const res = await fetch(`https://graphhopper.com/api/1/route?key=${encodeURIComponent(key)}`, {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(body)
   });
-
-  // Rate-Limit-Header auslesen
-  // X-RateLimit-Reset ist ein Unix-Timestamp (Sek. seit 1970) → Delta berechnen
-  const remaining    = parseInt(res.headers.get('X-RateLimit-Remaining') ?? '999');
-  const resetStamp   = parseInt(res.headers.get('X-RateLimit-Reset')     ?? '0');
-  const nowSec       = Math.floor(Date.now() / 1000);
-  const resetDeltaSec = resetStamp > nowSec ? resetStamp - nowSec : 0;
-
   if(!res.ok){
     const e = await res.json().catch(()=>({}));
     const msg = e?.message||e?.hints?.[0]?.message||'';
     if(res.status===401||res.status===403) throw new Error('Ungültiger GraphHopper Key. Bitte auf graphhopper.com/dashboard prüfen.');
-    if(res.status===429){
-      _ghBackoff.attempt++;
-      // Header-Delta bevorzugen, sonst Exponential Backoff (min. 5s)
-      const waitSec = resetDeltaSec > 0
-        ? resetDeltaSec
-        : Math.min(Math.pow(2, _ghBackoff.attempt) * 3, 60);
-      _ghBackoff.resetAt = Date.now() + waitSec * 1000;
-      startRateLimitCountdown(waitSec);
-      throw new Error(`__RATELIMIT__${waitSec}`);
-    }
+    if(res.status===429) throw new Error('GraphHopper Limit erreicht. Kurz warten und erneut versuchen.');
     throw new Error('Routenplanung fehlgeschlagen'+(msg?': '+msg:'.'));
-  }
-
-  // Wenn weniger als 5 Credits übrig → kleine Präventiv-Pause einbauen
-  if(remaining < 5 && remaining > 0){
-    const pauseSec = resetDeltaSec > 0 ? resetDeltaSec : 10;
-    _ghBackoff.resetAt = Date.now() + pauseSec * 1000;
-  } else {
-    _ghBackoff.attempt = 0;
   }
   const data = await res.json();
   if(!data.paths?.length) throw new Error('Keine Route gefunden. Bitte anderen Startpunkt wählen.');
@@ -1429,48 +1386,6 @@ function cleanRoute(feature){
   return feature;
 }
 
-
-// ══════════════════════════════════════════
-// RATE LIMIT COUNTDOWN
-// ══════════════════════════════════════════
-let _countdownTimer = null;
-
-function startRateLimitCountdown(seconds){
-  if(_countdownTimer) clearInterval(_countdownTimer);
-  loading(false);
-
-  const updateMsg = (s) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    const timeStr = m > 0
-      ? `${m}:${sec.toString().padStart(2,'0')} min`
-      : `${sec} Sek.`;
-    err('routeErr',
-      `⏱ GraphHopper API-Limit erreicht. Neue Route kann in ${timeStr} geplant werden.`
-    );
-  };
-
-  let remaining = Math.max(1, Math.ceil(seconds));
-  updateMsg(remaining);
-
-  _countdownTimer = setInterval(() => {
-    remaining--;
-    if(remaining <= 0){
-      clearInterval(_countdownTimer);
-      _countdownTimer = null;
-      err('routeErr', '');
-      // Button-Text zurücksetzen
-      q('genBtn').disabled = false;
-      q('spin').style.display = 'none';
-      q('genTxt').textContent = 'ROUTE PLANEN';
-      // Kurze Erfolgsmeldung
-      q('genTxt').textContent = '✓ Bereit — Route planen!';
-      setTimeout(() => { q('genTxt').textContent = 'ROUTE PLANEN'; }, 3000);
-    } else {
-      updateMsg(remaining);
-    }
-  }, 1000);
-}
 
 // ══════════════════════════════════════════
 // UI HELPERS
