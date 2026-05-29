@@ -610,7 +610,7 @@ function roadCustomModel(){
 // Rückgabe: { ok: bool, riskPct: number, details: string }
 // ══════════════════════════════════════════
 function validateRoadSurface(path){
-  const surfSegs  = path.details?.surface   || [];
+  const surfSegs  = path.details?.surface    || [];
   const classSegs = path.details?.road_class || [];
   const coords    = path.points?.coordinates || [];
   if(!surfSegs.length || !coords.length) return { ok: true, riskPct: 0 };
@@ -621,11 +621,16 @@ function validateRoadSurface(path){
     for(let i = from; i < to; i++) classAt[i] = (cls||'').toUpperCase();
   }
 
-  const RISKY_CLASSES = new Set(['TRACK','PATH','SERVICE','BRIDLEWAY','FOOTWAY','STEPS']);
-  const MEDIUM_CLASSES = new Set(['UNCLASSIFIED']);
-  const GOOD_SURFACES = new Set(['asphalt','paved','concrete','paving_stones','cobblestone']);
+  // Harte Sperren: Diese road_class darf NIEMALS in einer Rennrad-Route erscheinen
+  const HARD_BLOCK  = new Set(['TRACK','PATH','BRIDLEWAY','FOOTWAY','STEPS']);
+  // Risiko-Klassen: erlaubt aber nur mit bekannter guter Oberfläche
+  const RISKY_CLASS = new Set(['SERVICE','UNCLASSIFIED']);
+  const GOOD_SURF   = new Set(['asphalt','paved','concrete','paving_stones','cobblestone']);
+  const BAD_SURF    = new Set(['gravel','fine_gravel','ground','dirt','sand','grass','compacted']);
 
   let totalDist = 0, riskDist = 0;
+  let hardViolation = false;
+  let hardViolationClass = '';
 
   for(const [from, to, surf] of surfSegs){
     let segDist = 0;
@@ -634,34 +639,52 @@ function validateRoadSurface(path){
     }
     totalDist += segDist;
 
-    const surfNorm = (surf||'').toLowerCase();
+    const surfNorm = (surf||'').toLowerCase().trim();
     const cls      = classAt[from] || '';
-    const missing  = !surf || surf === 'null' || surfNorm === 'unknown';
-    const goodSurf = GOOD_SURFACES.has(surfNorm);
+    const missing  = !surf || surf === 'null' || surfNorm === '' || surfNorm === 'unknown';
 
+    // ── Harte Sperre: TRACK/PATH im Ergebnis = sofort ablehnen ──
+    if(HARD_BLOCK.has(cls)){
+      hardViolation = true;
+      hardViolationClass = cls;
+      riskDist += segDist;
+      continue;
+    }
+
+    // ── Schlechte bekannte Oberfläche = fast volle Anrechnung ──
+    if(BAD_SURF.has(surfNorm)){
+      riskDist += segDist * 0.9;
+      continue;
+    }
+
+    // ── Missing surface: Risiko abhängig von Straßenklasse ──
     if(missing){
-      if(RISKY_CLASSES.has(cls)){
-        riskDist += segDist * 1.0;   // Volle Anrechnung
-      } else if(MEDIUM_CLASSES.has(cls)){
-        riskDist += segDist * 0.4;   // Teilanrechnung
+      if(RISKY_CLASS.has(cls)){
+        // SERVICE/UNCLASSIFIED ohne Surface = hohes Risiko (Wichmannsdorfer-Weg-Problem)
+        riskDist += segDist * 0.7;
       } else {
-        riskDist += segDist * 0.15;  // Geringe Anrechnung
+        // PRIMARY/SECONDARY/TERTIARY/RESIDENTIAL ohne Surface = vertretbar
+        riskDist += segDist * 0.05;
       }
     }
-    // Bekannte schlechte Oberflächen sollten durch custom_model schon
-    // geblockt sein — hier nur als Sicherheitsnetz
-    else if(!goodSurf && ['gravel','fine_gravel','ground','dirt','sand','grass','compacted'].includes(surfNorm)){
-      riskDist += segDist * 0.8;
-    }
+    // Gute bekannte Oberfläche → kein Risiko
   }
 
   const riskPct = totalDist > 0 ? (riskDist / totalDist) * 100 : 0;
-  // Schwellenwert: >15% risikobehaftete Strecke → ablehnen
-  const MAX_RISK_PCT = 15;
+
+  // Schwellenwerte:
+  // Hard violation (TRACK/PATH tatsächlich in Route) → immer ablehnen
+  // >8% Risiko → ablehnen (war 15%, jetzt strenger)
+  const MAX_RISK_PCT = 8;
+  const ok = !hardViolation && riskPct <= MAX_RISK_PCT;
+
   return {
-    ok: riskPct <= MAX_RISK_PCT,
+    ok,
     riskPct: Math.round(riskPct),
-    detail: `${Math.round(riskPct)}% unbekannte/risikobehaftete Oberfläche`
+    hardViolation,
+    detail: hardViolation
+      ? `Gesperrter Wegtyp in Route: ${hardViolationClass}`
+      : `${Math.round(riskPct)}% risikobehaftete Oberfläche`
   };
 }
 
@@ -1356,4 +1379,4 @@ function setStatus(msg){ loading(true, msg); }
 function err(id,msg){ const e=q(id); e.textContent=msg; e.classList.toggle('on',!!msg); }
 </script>
 </body>
-</html> 
+</html>
