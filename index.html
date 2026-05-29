@@ -497,7 +497,6 @@ async function planRoute(){
     }
 
     S.route = feature;
-    S.mode = 'review';
     renderRoute(feature);
     showResults(feature);
     q('hint').style.display = 'none';
@@ -1155,8 +1154,6 @@ ${pts}
 // NEW VARIANT
 // ══════════════════════════════════════════
 function newVariant(){ S.seed=rnd(); planRoute(); }
-
-
 
 // ══════════════════════════════════════════
 // SURFACE ANALYSIS
