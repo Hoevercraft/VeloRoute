@@ -492,6 +492,7 @@ async function planRoute(){
     let feature;
 
     for(let attempt = 0; attempt < MAX_TRIES; attempt++){
+      if(attempt > 0) await new Promise(r => setTimeout(r, 1000)); // Rate-Limit Pause
       setStatus(attempt === 0 ? 'Berechne Route…' : `Passe Distanz an… (${hintDist.toFixed(0)} km)`);
       const raw = S.hot ? await planShade() : await roundtrip(S.coord, hintDist);
       setStatus('Bereinige Route…');
@@ -864,7 +865,10 @@ async function roundtrip(coord, distKm){
     const MAX_SURFACE_TRIES = 3;
     for(let t = 0; t < MAX_SURFACE_TRIES; t++){
       const seed = t === 0 ? S.seed : rnd();
-      if(t > 0) setStatus(`Prüfe Oberflächen… (Versuch ${t+1})`);
+      if(t > 0){
+        setStatus(`Prüfe Oberflächen… (Versuch ${t+1})`);
+        await new Promise(r => setTimeout(r, 1200)); // Rate-Limit Pause
+      }
       const res = await graphhopper({
         points:[coord],
         profile:'bike',
