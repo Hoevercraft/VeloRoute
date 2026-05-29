@@ -929,9 +929,9 @@ function renderRoute(feature){
   const col = routeColor();
 
   // Shadow
-  L.polyline(lls,{color:'rgba(0,0,0,.4)',weight:9,lineCap:'round',lineJoin:'round'}).addTo(S.rg);
-  // Route
-  L.polyline(lls,{color:col,weight:5,opacity:.95,lineCap:'round',lineJoin:'round'}).addTo(S.rg);
+  L.polyline(lls,{color:'rgba(0,0,0,.25)',weight:7,lineCap:'round',lineJoin:'round'}).addTo(S.rg);
+  // Route — halbtransparent damit der Untergrund (Wegtyp) sichtbar bleibt
+  L.polyline(lls,{color:col,weight:5,opacity:0.55,lineCap:'round',lineJoin:'round'}).addTo(S.rg);
 
   S.map.fitBounds(L.latLngBounds(lls),{padding:[40,40]});
 
