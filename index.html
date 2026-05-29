@@ -549,30 +549,48 @@ async function graphhopper(body){
 }
 
 function roadCustomModel(){
-  // Doppel-Sperre: speed UND priority.
-  // speed-Limit auf 2 km/h = Segment dauert 15-30x länger → Round-Trip-Algo meidet es.
-  // priority 0.01 = zusätzliche Gewichtungsstrafe.
-  // road_class TRACK = highway=track (Forst-/Feldwege)
-  // road_class PATH  = highway=path/footway/bridleway (Wiesen-/Waldpfade)
-  // surface-Filter fängt explizit getaggte unbefestigte Oberflächen.
+  // Allowlist-Strategie mit else_if/else:
+  // Bekannte gepflasterte Oberflächen → bevorzugt
+  // Bekannte unbefestigte Oberflächen → hart geblockt
+  // Gute Straßenklassen ohne Surface-Tag → erlaubt (wahrscheinlich asphaltiert)
+  // TRACK/PATH ohne Surface-Tag → geblockt
+  // Alles andere ohne Surface-Tag → stark benachteiligt (inkl. "missing")
   return {
-    speed:[
-      {if:'road_class == TRACK',    limit_to:'2'},
-      {if:'road_class == PATH',     limit_to:'2'},
-      {if:'surface == GRAVEL',      limit_to:'2'},
-      {if:'surface == GROUND',      limit_to:'2'},
-      {if:'surface == GRASS',       limit_to:'2'},
-      {if:'surface == SAND',        limit_to:'2'},
-      {if:'surface == FINE_GRAVEL', limit_to:'2'}
-    ],
+    distance_influence: 20,
     priority:[
-      {if:'road_class == TRACK',    multiply_by:'0.01'},
-      {if:'road_class == PATH',     multiply_by:'0.01'},
-      {if:'surface == GRAVEL',      multiply_by:'0.01'},
-      {if:'surface == GROUND',      multiply_by:'0.01'},
-      {if:'surface == GRASS',       multiply_by:'0.01'},
-      {if:'surface == SAND',        multiply_by:'0.01'},
-      {if:'surface == FINE_GRAVEL', multiply_by:'0.01'}
+      // Bekannte gepflasterte Oberflächen: boosten
+      { if:      'surface == ASPHALT',       multiply_by:'3.0'  },
+      { else_if: 'surface == CONCRETE',      multiply_by:'2.5'  },
+      { else_if: 'surface == PAVED',         multiply_by:'2.5'  },
+      { else_if: 'surface == PAVING_STONES', multiply_by:'1.5'  },
+      { else_if: 'surface == COBBLESTONE',   multiply_by:'0.7'  },
+      // Bekannte unbefestigte Oberflächen: absolut sperren
+      { else_if: 'surface == GRAVEL',        multiply_by:'0.01' },
+      { else_if: 'surface == FINE_GRAVEL',   multiply_by:'0.01' },
+      { else_if: 'surface == GROUND',        multiply_by:'0.01' },
+      { else_if: 'surface == DIRT',          multiply_by:'0.01' },
+      { else_if: 'surface == SAND',          multiply_by:'0.01' },
+      { else_if: 'surface == GRASS',         multiply_by:'0.01' },
+      { else_if: 'surface == COMPACTED',     multiply_by:'0.01' },
+      // Kein Surface-Tag → Entscheidung nach Straßenklasse:
+      // Gute Klassen → wahrscheinlich asphaltiert → erlaubt
+      { else_if: 'road_class == PRIMARY',      multiply_by:'1.4' },
+      { else_if: 'road_class == SECONDARY',    multiply_by:'1.5' },
+      { else_if: 'road_class == TERTIARY',     multiply_by:'1.6' },
+      { else_if: 'road_class == RESIDENTIAL',  multiply_by:'1.5' },
+      { else_if: 'road_class == CYCLEWAY',     multiply_by:'2.0' },
+      { else_if: 'road_class == LIVING_STREET',multiply_by:'1.2' },
+      { else_if: 'road_class == SERVICE',      multiply_by:'1.0' },
+      // TRACK/PATH ohne Surface-Tag → geblockt
+      { else_if: 'road_class == TRACK',        multiply_by:'0.01' },
+      { else_if: 'road_class == PATH',         multiply_by:'0.01' },
+      // Alles übrige ohne Surface-Tag → stark benachteiligt
+      { else:    {},                            multiply_by:'0.05' }
+    ],
+    speed:[
+      // Unbefestigte Oberflächen auf 1 km/h → Route dauert ewig → Algo meidet sie
+      { if:'surface == GRAVEL || surface == FINE_GRAVEL || surface == GROUND || surface == DIRT || surface == SAND || surface == GRASS || surface == COMPACTED', limit_to:'1' },
+      { if:'road_class == TRACK || road_class == PATH', limit_to:'1' }
     ]
   };
 }
@@ -832,19 +850,56 @@ async function planShade(){
   return roundtrip(S.coord, S.dist);
 }
 
-// Parks: befestigte Wege, schattige Alleen — sicher für Rennrad
+// Parks: Rennrad-sicher — wir fragen keine Park-Zentroide ab,
+// sondern asphaltierte Straßen IN DER NÄHE von Parks.
+// Grund: GH snappt Wegpunkte auf den nächsten routbaren Punkt —
+// Park-Zentroide landen oft auf Schotterwegen. Straßenknoten
+// garantieren Asphalt unabhängig vom roadCustomModel().
 async function queryParks(la,lo,rm){
-  const q = `[out:json][timeout:12];(
+  // Schritt 1: Parks finden (als Referenzpunkte)
+  const qParks = `[out:json][timeout:12];(
     way["leisure"="park"](around:${rm},${la},${lo});
     way["landuse"="recreation_ground"](around:${rm},${la},${lo});
     relation["leisure"="park"](around:${rm},${la},${lo});
-  );out center qt 80;`;
-  const res = await fetch('https://overpass-api.de/api/interpreter',{
-    method:'POST', body:'data='+encodeURIComponent(q)
+  );out center qt 40;`;
+
+  // Schritt 2: Asphaltierte Straßen in der Nähe
+  // Diese Knoten liegen garantiert auf fahrbarem Untergrund
+  const qRoads = `[out:json][timeout:12];(
+    way["highway"~"^(secondary|tertiary|residential|cycleway|unclassified)$"]
+       ["surface"~"^(asphalt|paved|concrete)$"](around:${rm},${la},${lo});
+    way["highway"~"^(secondary|tertiary|residential|cycleway)$"]
+       [!"surface"](around:${rm},${la},${lo});
+  );out center qt 150;`;
+
+  const [rP, rR] = await Promise.allSettled([
+    fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(qParks)}),
+    fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(qRoads)})
+  ]);
+
+  let parks = [], roads = [];
+
+  if(rP.status==='fulfilled' && rP.value.ok){
+    const d = await rP.value.json();
+    parks = d.elements.filter(e=>e.center||e.lat).map(e=>e.center?[e.center.lon,e.center.lat]:[e.lon,e.lat]);
+  }
+  if(rR.status==='fulfilled' && rR.value.ok){
+    const d = await rR.value.json();
+    roads = d.elements.filter(e=>e.center||e.lat).map(e=>e.center?[e.center.lon,e.center.lat]:[e.lon,e.lat]);
+  }
+
+  if(!roads.length) return parks; // Fallback auf Park-Zentroide wenn keine Straßen gefunden
+
+  // Pro Park-Punkt die nächstgelegene asphaltierte Straße wählen
+  // → Wegpunkt liegt auf sicherem Untergrund, ist aber trotzdem "nah am Park"
+  return parks.map(([pLo, pLa]) => {
+    let best = null, bestD = Infinity;
+    for(const [rLo, rLa] of roads){
+      const d = hav(pLa, pLo, rLa, rLo);
+      if(d < bestD){ bestD = d; best = [rLo, rLa]; }
+    }
+    return best || [pLo, pLa]; // Fallback auf Park-Zentroid
   });
-  if(!res.ok) throw new Error('Overpass error');
-  const d = await res.json();
-  return d.elements.filter(e=>e.center||e.lat).map(e=>e.center?[e.center.lon,e.center.lat]:[e.lon,e.lat]);
 }
 
 // Wälder + Parks: für Gravel/Hardcore
