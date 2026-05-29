@@ -537,7 +537,7 @@ async function graphhopper(body){
   if(!data.paths?.length) throw new Error('Keine Route gefunden. Bitte anderen Startpunkt wählen.');
   const path = data.paths[0];
   const surfBreakdown = parseSurfaceDetails(path);
-  return {
+  const feature = {
     type:'Feature',
     geometry: path.points,
     properties:{
@@ -546,13 +546,18 @@ async function graphhopper(body){
       surfBreakdown
     }
   };
+  // ghPath wird für validateRoadSurface benötigt (road_class + surface details)
+  feature.ghPath = path;
+  return feature;
 }
 
 function roadCustomModel(){
   // GH Free Plan — nur validierte Enums, multiply_by max 1.0
-  // Strategie: TRACK + PATH + unbefestigte Oberflächen → speed 1 + priority 0.01
-  // Gute Straßen bekommen keine Boosts (>1.0 vermeiden), sie gewinnen
-  // automatisch weil alles schlechte geblockt ist.
+  // SERVICE roads: viele Wirtschaftswege ohne Surface-Tag → stark bestrafen
+  // TRACK + PATH: hart geblockt
+  // Bekannte unbefestigte Oberflächen: hart geblockt
+  // "Missing surface": wird per Post-Processing (validateRoadSurface)
+  //  abgefangen — GH Free Plan unterstützt keine surface==MISSING Regel
   return {
     distance_influence: 25,
     speed:[
@@ -569,6 +574,8 @@ function roadCustomModel(){
     priority:[
       {if:'road_class == TRACK',    multiply_by:'0.01'},
       {if:'road_class == PATH',     multiply_by:'0.01'},
+      // SERVICE: Wirtschaftswege oft ohne Surface → stark bestrafen
+      {if:'road_class == SERVICE',  multiply_by:'0.05'},
       {if:'surface == GRAVEL',      multiply_by:'0.01'},
       {if:'surface == FINE_GRAVEL', multiply_by:'0.01'},
       {if:'surface == GROUND',      multiply_by:'0.01'},
@@ -581,6 +588,82 @@ function roadCustomModel(){
 }
 
 
+
+
+// ══════════════════════════════════════════
+// SURFACE VALIDATOR (Post-Processing)
+// Löst das "missing surface" Problem das GH Free Plan nicht
+// direkt im custom_model abfangen kann.
+//
+// Logik: GH gibt details.surface zurück. Segmente ohne
+// Surface-Tag erscheinen als null. Wir berechnen den
+// Anteil verdächtiger Segmente und lehnen die Route ab
+// wenn er zu hoch ist.
+//
+// Risk-Score pro Segment:
+//   surface = null + road_class in [TRACK,PATH,SERVICE] → 100 Pkt (verwerfen)
+//   surface = null + road_class = UNCLASSIFIED           →  40 Pkt
+//   surface = null + sonstige Klasse                     →  15 Pkt
+//   surface bekannt und gut (asphalt, paved, concrete)   →   0 Pkt
+//   surface bekannt und schlecht                         → geblockt durch custom_model
+//
+// Rückgabe: { ok: bool, riskPct: number, details: string }
+// ══════════════════════════════════════════
+function validateRoadSurface(path){
+  const surfSegs  = path.details?.surface   || [];
+  const classSegs = path.details?.road_class || [];
+  const coords    = path.points?.coordinates || [];
+  if(!surfSegs.length || !coords.length) return { ok: true, riskPct: 0 };
+
+  // Baue pro Koordinaten-Index eine Map: index → road_class
+  const classAt = {};
+  for(const [from, to, cls] of classSegs){
+    for(let i = from; i < to; i++) classAt[i] = (cls||'').toUpperCase();
+  }
+
+  const RISKY_CLASSES = new Set(['TRACK','PATH','SERVICE','BRIDLEWAY','FOOTWAY','STEPS']);
+  const MEDIUM_CLASSES = new Set(['UNCLASSIFIED']);
+  const GOOD_SURFACES = new Set(['asphalt','paved','concrete','paving_stones','cobblestone']);
+
+  let totalDist = 0, riskDist = 0;
+
+  for(const [from, to, surf] of surfSegs){
+    let segDist = 0;
+    for(let i = from; i < to && i+1 < coords.length; i++){
+      segDist += hav(coords[i][1], coords[i][0], coords[i+1][1], coords[i+1][0]);
+    }
+    totalDist += segDist;
+
+    const surfNorm = (surf||'').toLowerCase();
+    const cls      = classAt[from] || '';
+    const missing  = !surf || surf === 'null' || surfNorm === 'unknown';
+    const goodSurf = GOOD_SURFACES.has(surfNorm);
+
+    if(missing){
+      if(RISKY_CLASSES.has(cls)){
+        riskDist += segDist * 1.0;   // Volle Anrechnung
+      } else if(MEDIUM_CLASSES.has(cls)){
+        riskDist += segDist * 0.4;   // Teilanrechnung
+      } else {
+        riskDist += segDist * 0.15;  // Geringe Anrechnung
+      }
+    }
+    // Bekannte schlechte Oberflächen sollten durch custom_model schon
+    // geblockt sein — hier nur als Sicherheitsnetz
+    else if(!goodSurf && ['gravel','fine_gravel','ground','dirt','sand','grass','compacted'].includes(surfNorm)){
+      riskDist += segDist * 0.8;
+    }
+  }
+
+  const riskPct = totalDist > 0 ? (riskDist / totalDist) * 100 : 0;
+  // Schwellenwert: >15% risikobehaftete Strecke → ablehnen
+  const MAX_RISK_PCT = 15;
+  return {
+    ok: riskPct <= MAX_RISK_PCT,
+    riskPct: Math.round(riskPct),
+    detail: `${Math.round(riskPct)}% unbekannte/risikobehaftete Oberfläche`
+  };
+}
 
 // ── GRAPHHOPPER (Hardcore Gravel — unbefestigt priorisiert) ──
 // Invertierte Logik: Asphalt/Beton bekommt Malus → GRAVEL, GROUND, SAND,
@@ -753,17 +836,27 @@ async function ors(profile, body){
 
 async function roundtrip(coord, distKm){
   if(S.bike==='road'){
-    return graphhopper({
-      points:[coord],
-      profile:'bike',
-      algorithm:'round_trip',
-      'round_trip.distance': distKm*1000,
-      'round_trip.seed': S.seed,
-      points_encoded:false,
-      elevation:true,
-      details:['surface'],
-      custom_model: roadCustomModel()
-    });
+    // Bis zu 3 Versuche mit verschiedenen Seeds — verwirft Routen
+    // mit zu vielen "missing surface" Segmenten (Feld-/Schotterwege)
+    const MAX_SURFACE_TRIES = 3;
+    for(let t = 0; t < MAX_SURFACE_TRIES; t++){
+      const seed = t === 0 ? S.seed : rnd();
+      if(t > 0) setStatus(`Prüfe Oberflächen… (Versuch ${t+1})`);
+      const res = await graphhopper({
+        points:[coord],
+        profile:'bike',
+        algorithm:'round_trip',
+        'round_trip.distance': distKm*1000,
+        'round_trip.seed': seed,
+        points_encoded:false,
+        elevation:true,
+        details:['surface','road_class'],
+        custom_model: roadCustomModel()
+      });
+      const check = validateRoadSurface(res.ghPath||{});
+      if(check.ok) return res;
+      if(t === MAX_SURFACE_TRIES-1) return res; // letzter Versuch → trotzdem nehmen
+    }
   } else if(S.bike==='hardcore'){
     return await hardcoreRoundtrip(coord, distKm);
   } else {
@@ -787,7 +880,7 @@ async function waypoints(coords){
       profile:'bike',
       points_encoded:false,
       elevation:true,
-      details:['surface'],
+      details:['surface','road_class'],
       custom_model: roadCustomModel()
     });
   } else if(S.bike==='hardcore'){
@@ -1263,4 +1356,4 @@ function setStatus(msg){ loading(true, msg); }
 function err(id,msg){ const e=q(id); e.textContent=msg; e.classList.toggle('on',!!msg); }
 </script>
 </body>
-</html>
+</html> 
