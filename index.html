@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>VeloRoute — Fahrradrouten Planer</title>
+<link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -15,7 +16,6 @@
   --warm:#f59e0b;--warm-dim:rgba(245,158,11,.12);
   --blue:#94a3b8;--blue-dim:rgba(148,163,184,.13);
   --orange:#4ade80;--orange-dim:rgba(74,222,128,.13);
-  --red:#e11d48;--red-dim:rgba(225,29,72,.13);
   --red:#e11d48;--red-dim:rgba(225,29,72,.13);
   --text:#e2e8f0;--muted:#64748b;--danger:#ef4444;--r:10px;
 }
@@ -66,9 +66,6 @@ header{height:54px;background:var(--panel);border-bottom:1px solid var(--border)
 .bike-card.ahc{border-color:var(--red);background:var(--red-dim)}.bike-card.ahc .bc-title,.bike-card.ahc .bc-icon{color:var(--red)}
 .bike-card.full{grid-column:1/-1;flex-direction:row;gap:12px;text-align:left;padding:11px 14px;align-items:center}
 .bike-card.full .bc-sub{text-align:left}
-.bike-card.ahc{border-color:var(--red);background:var(--red-dim)}.bike-card.ahc .bc-title{color:var(--red)}
-.bike-card.full{grid-column:1/-1;flex-direction:row;gap:12px;text-align:left;padding:10px 14px}
-.bike-card.full .bc-sub{flex:1}
 
 /* Distance */
 .dist-top{display:flex;align-items:baseline;gap:6px;margin-bottom:10px}
@@ -456,8 +453,9 @@ function placeStart(){
 
 // ══════════════════════════════════════════
 // ROUTE PLANNING
-// Rennrad → GraphHopper (custom_model: nur Asphalt)
-// Gravel  → ORS (cycling-mountain, Schotter/Trails)
+// Rennrad  → GraphHopper eigene Wegpunkte via queryRoadWps()
+// Gravel   → ORS (cycling-mountain)
+// Hardcore → GraphHopper eigene Wegpunkte via queryForestWps()
 // ══════════════════════════════════════════
 async function planRoute(){
   if((S.bike==='road'||S.bike==='hardcore') && !S.keyGH){
@@ -473,26 +471,23 @@ async function planRoute(){
 
   try {
     // ── Distanz-kontrollierte Retry-Schleife ──
-    // Wenn die Route mehr als 10 km über der Zieldistanz liegt,
-    // wird der Hint proportional nach unten skaliert und neu berechnet.
     const MAX_OVER_KM = 10;
     const MAX_TRIES   = 2;
     let hintDist = S.dist;
     let feature;
 
     for(let attempt = 0; attempt < MAX_TRIES; attempt++){
-      if(attempt > 0) await new Promise(r => setTimeout(r, 1000)); // Rate-Limit Pause
+      if(attempt > 0) await new Promise(r => setTimeout(r, 1000));
       setStatus(attempt === 0 ? 'Berechne Route…' : `Passe Distanz an… (${hintDist.toFixed(0)} km)`);
       const raw = S.hot ? await planShade() : await roundtrip(S.coord, hintDist);
       setStatus('Bereinige Route…');
       feature = cleanRoute(raw);
 
       const actualKm = feature.properties.summary.distance / 1000;
-      if(actualKm <= S.dist + MAX_OVER_KM) break; // passt — fertig
+      if(actualKm <= S.dist + MAX_OVER_KM) break;
 
-      // Proportional skalieren: z.B. Ziel 50 km, Ergebnis 80 km → neuer Hint: 50*(50/80) ≈ 31 km
       const scaled = Math.max(10, hintDist * (S.dist / actualKm));
-      if(Math.abs(scaled - hintDist) < 1) break; // kein Fortschritt mehr — abbrechen
+      if(Math.abs(scaled - hintDist) < 1) break;
       hintDist = scaled;
     }
 
@@ -505,9 +500,9 @@ async function planRoute(){
   } finally { loading(false); }
 }
 
-// ── GRAPHHOPPER (Rennrad — strikt asphaltiert) ──
-// custom_model penalisiert unbefestigte Oberflächen mit Faktor 0.01
-// → ORS-Umgehung: GH filtert auf Netzwerk-Ebene
+// ══════════════════════════════════════════
+// GRAPHHOPPER API WRAPPER
+// ══════════════════════════════════════════
 async function graphhopper(body){
   const key = sanitize(S.keyGH);
   const res = await fetch(`https://graphhopper.com/api/1/route?key=${encodeURIComponent(key)}`, {
@@ -535,18 +530,14 @@ async function graphhopper(body){
       surfBreakdown
     }
   };
-  // ghPath wird für validateRoadSurface benötigt (road_class + surface details)
   feature.ghPath = path;
   return feature;
 }
 
+// ══════════════════════════════════════════
+// ROAD CUSTOM MODEL (Rennrad — strikt asphaltiert)
+// ══════════════════════════════════════════
 function roadCustomModel(){
-  // GH Free Plan — nur validierte Enums, multiply_by max 1.0
-  // SERVICE roads: viele Wirtschaftswege ohne Surface-Tag → stark bestrafen
-  // TRACK + PATH: hart geblockt
-  // Bekannte unbefestigte Oberflächen: hart geblockt
-  // "Missing surface": wird per Post-Processing (validateRoadSurface)
-  //  abgefangen — GH Free Plan unterstützt keine surface==MISSING Regel
   return {
     distance_influence: 25,
     speed:[
@@ -563,7 +554,6 @@ function roadCustomModel(){
     priority:[
       {if:'road_class == TRACK',    multiply_by:'0.01'},
       {if:'road_class == PATH',     multiply_by:'0.01'},
-      // SERVICE: Wirtschaftswege oft ohne Surface → stark bestrafen
       {if:'road_class == SERVICE',  multiply_by:'0.05'},
       {if:'surface == GRAVEL',      multiply_by:'0.01'},
       {if:'surface == FINE_GRAVEL', multiply_by:'0.01'},
@@ -576,27 +566,8 @@ function roadCustomModel(){
   };
 }
 
-
-
-
 // ══════════════════════════════════════════
 // SURFACE VALIDATOR (Post-Processing)
-// Löst das "missing surface" Problem das GH Free Plan nicht
-// direkt im custom_model abfangen kann.
-//
-// Logik: GH gibt details.surface zurück. Segmente ohne
-// Surface-Tag erscheinen als null. Wir berechnen den
-// Anteil verdächtiger Segmente und lehnen die Route ab
-// wenn er zu hoch ist.
-//
-// Risk-Score pro Segment:
-//   surface = null + road_class in [TRACK,PATH,SERVICE] → 100 Pkt (verwerfen)
-//   surface = null + road_class = UNCLASSIFIED           →  40 Pkt
-//   surface = null + sonstige Klasse                     →  15 Pkt
-//   surface bekannt und gut (asphalt, paved, concrete)   →   0 Pkt
-//   surface bekannt und schlecht                         → geblockt durch custom_model
-//
-// Rückgabe: { ok: bool, riskPct: number, details: string }
 // ══════════════════════════════════════════
 function validateRoadSurface(path){
   const surfSegs  = path.details?.surface    || [];
@@ -604,17 +575,13 @@ function validateRoadSurface(path){
   const coords    = path.points?.coordinates || [];
   if(!surfSegs.length || !coords.length) return { ok: true, riskPct: 0 };
 
-  // Baue pro Koordinaten-Index eine Map: index → road_class
   const classAt = {};
   for(const [from, to, cls] of classSegs){
     for(let i = from; i < to; i++) classAt[i] = (cls||'').toUpperCase();
   }
 
-  // Harte Sperren: Diese road_class darf NIEMALS in einer Rennrad-Route erscheinen
   const HARD_BLOCK  = new Set(['TRACK','PATH','BRIDLEWAY','FOOTWAY','STEPS']);
-  // Risiko-Klassen: erlaubt aber nur mit bekannter guter Oberfläche
   const RISKY_CLASS = new Set(['SERVICE','UNCLASSIFIED']);
-  const GOOD_SURF   = new Set(['asphalt','paved','concrete','paving_stones','cobblestone']);
   const BAD_SURF    = new Set(['gravel','fine_gravel','ground','dirt','sand','grass','compacted']);
 
   let totalDist = 0, riskDist = 0;
@@ -632,38 +599,26 @@ function validateRoadSurface(path){
     const cls      = classAt[from] || '';
     const missing  = !surf || surf === 'null' || surfNorm === '' || surfNorm === 'unknown';
 
-    // ── Harte Sperre: TRACK/PATH im Ergebnis = sofort ablehnen ──
     if(HARD_BLOCK.has(cls)){
       hardViolation = true;
       hardViolationClass = cls;
       riskDist += segDist;
       continue;
     }
-
-    // ── Schlechte bekannte Oberfläche = fast volle Anrechnung ──
     if(BAD_SURF.has(surfNorm)){
       riskDist += segDist * 0.9;
       continue;
     }
-
-    // ── Missing surface: Risiko abhängig von Straßenklasse ──
     if(missing){
       if(RISKY_CLASS.has(cls)){
-        // SERVICE/UNCLASSIFIED ohne Surface = hohes Risiko (Wichmannsdorfer-Weg-Problem)
         riskDist += segDist * 0.7;
       } else {
-        // PRIMARY/SECONDARY/TERTIARY/RESIDENTIAL ohne Surface = vertretbar
         riskDist += segDist * 0.05;
       }
     }
-    // Gute bekannte Oberfläche → kein Risiko
   }
 
   const riskPct = totalDist > 0 ? (riskDist / totalDist) * 100 : 0;
-
-  // Schwellenwerte:
-  // Hard violation (TRACK/PATH tatsächlich in Route) → immer ablehnen
-  // >8% Risiko → ablehnen (war 15%, jetzt strenger)
   const MAX_RISK_PCT = 5;
   const ok = !hardViolation && riskPct <= MAX_RISK_PCT;
 
@@ -677,25 +632,17 @@ function validateRoadSurface(path){
   };
 }
 
-// ── GRAPHHOPPER (Hardcore Gravel — unbefestigt priorisiert) ──
-// Invertierte Logik: Asphalt/Beton bekommt Malus → GRAVEL, GROUND, SAND,
-// FINE_GRAVEL, TRACK und PATH behalten volle Priorität 1.0 und werden
-// vom Round-Trip-Algorithmus aktiv bevorzugt.
+// ══════════════════════════════════════════
+// HARDCORE GRAVEL CUSTOM MODEL
+// ══════════════════════════════════════════
 function hardcoreGravelCustomModel(){
-  // distance_influence: hoher Wert = Algo nimmt gerne längere Umwege
-  // für bessere (= unbefestigte) Oberflächen.
-  // Logik: Alles ohne Asphalt/Beton hat Prio 1.0 → wird aktiv gesucht.
-  // Asphalt/Beton bekommt extrem niedrige Prio → nur wenn absolut keine
-  // andere Verbindung existiert.
   return {
     distance_influence: 150,
     priority:[
-      // ── ASPHALT / BETON: komplett unerwünscht ──
       {if:'surface == ASPHALT',        multiply_by:'0.02'},
       {if:'surface == CONCRETE',       multiply_by:'0.02'},
       {if:'surface == PAVING_STONES',  multiply_by:'0.04'},
       {if:'surface == COBBLESTONE',    multiply_by:'0.06'},
-      // ── UNBEFESTIGT: maximale Priorität ──
       {if:'surface == GRAVEL',         multiply_by:'3.0'},
       {if:'surface == FINE_GRAVEL',    multiply_by:'3.0'},
       {if:'surface == GROUND',         multiply_by:'2.8'},
@@ -703,26 +650,304 @@ function hardcoreGravelCustomModel(){
       {if:'surface == SAND',           multiply_by:'2.5'},
       {if:'surface == GRASS',          multiply_by:'2.2'},
       {if:'surface == COMPACTED',      multiply_by:'2.5'},
-      // ── WEGE-TYPEN: Schotter-/Waldwege maximal bevorzugen ──
       {if:'road_class == TRACK',       multiply_by:'3.0'},
       {if:'road_class == PATH',        multiply_by:'2.5'},
-      // ── STRASSEN: sperren ──
       {if:'road_class == MOTORWAY',    multiply_by:'0.01'},
       {if:'road_class == TRUNK',       multiply_by:'0.01'},
       {if:'road_class == PRIMARY',     multiply_by:'0.03'},
       {if:'road_class == SECONDARY',   multiply_by:'0.05'}
     ],
     speed:[
-      // Asphalt massiv verlangsamen → Umweg über Schotter lohnt sich
       {if:'surface == ASPHALT',   limit_to:'5'},
       {if:'surface == CONCRETE',  limit_to:'5'}
     ]
   };
 }
 
-// ── HARDCORE ROUNDTRIP: Waldwegpunkte erzwingen ──
-// Strategie: Overpass liefert Waldgebiete → Zentroide als Pflicht-Wegpunkte.
-// Route wird durch den Wald gezogen, Kanalwege fallen raus.
+// ══════════════════════════════════════════
+// ROAD ROUNDTRIP — Neue Wegpunkt-Logik
+//
+// Strategie:
+//  1. Overpass: asphaltierte Straßen im Radius laden
+//  2. queryRoadWps() wählt 3 Wegpunkte aus (Winkel-Logik)
+//  3. GraphHopper verbindet: [start, wp1, wp2, wp3, start]
+//  4. Fallback: Wenn Overpass scheitert → round_trip Algorithmus
+//
+// Wegpunkt-Auswahl-Logik (queryRoadWps):
+//  - Zielwinkel: 0°, 120°, 240° (gleichmäßiges Dreieck)
+//  - Zieldistanz: dist * 0.28 (ergibt ~realistische Rundkurs-Geometrie)
+//    → bei 50 km Ziel: Wegpunkte ca. 14 km vom Start entfernt
+//  - Kandidaten: innerhalb ±50° des Zielwinkels, 25%–175% der Zieldistanz
+//  - Scoring: Kombination aus Winkeltreue + Distanzpassung
+//  - Diversität: Kandidaten müssen mind. 2 km voneinander entfernt sein
+//  - Seed-Variation: Pro Neuberechnung (newVariant) anderer Startwinkel-Offset
+// ══════════════════════════════════════════
+async function roadRoundtrip(coord, distKm){
+  const [lo, la] = coord;
+
+  // Radius: so groß wie nötig um alle 3 Wegpunkte zu finden,
+  // aber nicht so groß dass Overpass überlastet wird.
+  // Wegpunkte liegen bei ~dist*0.28 km Entfernung → Radius = dist*0.35 km
+  const radius = Math.min(Math.round(distKm * 350), 60000); // max 60 km
+
+  setStatus('Suche Rennrad-Straßen…');
+
+  let roadWps = [];
+  try {
+    roadWps = await queryRoadWps(la, lo, radius, distKm);
+  } catch(e) {
+    // Overpass nicht erreichbar → direkt Fallback
+    console.warn('queryRoadWps fehlgeschlagen:', e.message);
+  }
+
+  if(roadWps.length >= 2){
+    // ── Hauptpfad: eigene Wegpunkte ──
+    setStatus('Optimiere Rennrad-Route…');
+    try {
+      const res = await graphhopper({
+        points: [coord, ...roadWps, coord],
+        profile: 'bike',
+        points_encoded: false,
+        elevation: true,
+        details: ['surface','road_class'],
+        custom_model: roadCustomModel()
+      });
+      const check = validateRoadSurface(res.ghPath||{});
+      if(check.ok) return res;
+      // Surface-Qualität nicht gut genug → zweiter Versuch mit neuen Wegpunkten
+      setStatus('Prüfe Oberflächen…');
+      await new Promise(r => setTimeout(r, 1000));
+      const roadWps2 = await queryRoadWps(la, lo, radius, distKm, true); // strictMode=true
+      if(roadWps2.length >= 2){
+        const res2 = await graphhopper({
+          points: [coord, ...roadWps2, coord],
+          profile: 'bike',
+          points_encoded: false,
+          elevation: true,
+          details: ['surface','road_class'],
+          custom_model: roadCustomModel()
+        });
+        const check2 = validateRoadSurface(res2.ghPath||{});
+        if(!check2.ok){
+          res2.surfaceWarning = true;
+          res2.surfaceDetail  = check2.detail;
+        }
+        return res2;
+      }
+      if(!check.ok){
+        res.surfaceWarning = true;
+        res.surfaceDetail  = check.detail;
+      }
+      return res;
+    } catch(e){
+      console.warn('Wegpunkt-Route fehlgeschlagen, Fallback zu round_trip:', e.message);
+    }
+  }
+
+  // ── Fallback: round_trip Algorithmus ──
+  setStatus('Verwende Fallback-Algorithmus…');
+  return roadRoundtripFallback(coord, distKm);
+}
+
+async function roadRoundtripFallback(coord, distKm){
+  // Klassischer round_trip als Sicherheitsnetz
+  const MAX_SURFACE_TRIES = 2;
+  for(let t = 0; t < MAX_SURFACE_TRIES; t++){
+    const seed = t === 0 ? S.seed : rnd();
+    if(t > 0){
+      setStatus(`Prüfe Oberflächen… (Versuch ${t+1})`);
+      await new Promise(r => setTimeout(r, 1200));
+    }
+    const res = await graphhopper({
+      points:[coord],
+      profile:'bike',
+      algorithm:'round_trip',
+      'round_trip.distance': distKm*1000,
+      'round_trip.seed': seed,
+      points_encoded:false,
+      elevation:true,
+      details:['surface','road_class'],
+      custom_model: roadCustomModel()
+    });
+    const check = validateRoadSurface(res.ghPath||{});
+    if(check.ok) return res;
+    if(t === MAX_SURFACE_TRIES-1){
+      res.surfaceWarning = true;
+      res.surfaceDetail  = check.detail;
+      return res;
+    }
+  }
+}
+
+// ══════════════════════════════════════════
+// QUERY ROAD WAYPOINTS (Rennrad — Kernfunktion)
+//
+// Lädt asphaltierte Straßen via Overpass und wählt
+// 3 optimale Wegpunkte für eine schöne Rundroute aus.
+//
+// Parameter:
+//   la, lo      — Startkoordinaten
+//   rm          — Suchradius in Metern
+//   distKm      — Gewünschte Gesamtdistanz
+//   strictMode  — true: nur explizit asphaltierte Wege (kein surface=*)
+//
+// Wegpunkt-Auswahl:
+//   Zielwinkel:   seedAngle + 0°, seedAngle + 120°, seedAngle + 240°
+//   Zieldistanz:  distKm * 0.28  (empirisch ermittelt für schöne Rundkurse)
+//   Score:        (1 - angleDiff/50) * 0.6 + (1 - distDiff/targetDist) * 0.4
+//   Diversität:   jeder neue Wegpunkt muss > 2 km von bereits gewählten entfernt sein
+// ══════════════════════════════════════════
+async function queryRoadWps(la, lo, rm, distKm, strictMode = false){
+
+  // ── TUNING-KONSTANTE ──────────────────────────────────────────────────────
+  // Wegpunkte liegen bei (distKm * DIST_FACTOR) km Entfernung vom Start.
+  // Faustregel: 0.25 = kompaktes Dreieck, 0.35 = großzügigere Schleifen.
+  // Empfehlung: mit 50/80/100 km Routen testen und ggf. anpassen.
+  const DIST_FACTOR = 0.28;
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Winkel-Offset basierend auf S.seed → jede Neu-Berechnung dreht das Dreieck etwas
+  // Moduliert zwischen 0° und 119° (volle Drehung = neues Dreieck, nicht nur Spiegelung)
+  const seedAngle = (S.seed % 120);
+
+  const targetDist = distKm * DIST_FACTOR;
+
+  // Zwei Overpass-Queries parallel:
+  // Query A: bevorzugte Rennrad-Straßen MIT explizitem surface=asphalt/paved/concrete
+  //   → secondary/tertiary/cycleway/primary (residential bewusst ausgelassen)
+  // Query B (nur wenn !strictMode): gleiche Typen OHNE Surface-Tag (in DE oft nicht getaggt)
+  //   + residential nur hier als Fallback-Pool, nicht in Query A
+  const qA = `[out:json][timeout:20];(
+    way["highway"~"^(secondary|tertiary|cycleway)$"]["surface"~"^(asphalt|paved|concrete)$"](around:${rm},${la},${lo});
+    way["highway"="primary"]["surface"~"^(asphalt|paved|concrete)$"](around:${rm},${la},${lo});
+  );out center qt 300;`;
+
+  const qB = `[out:json][timeout:20];(
+    way["highway"~"^(secondary|tertiary)$"][!"surface"](around:${rm},${la},${lo});
+    way["highway"="cycleway"][!"surface"](around:${rm},${la},${lo});
+    way["highway"="residential"]["surface"~"^(asphalt|paved|concrete)$"](around:${rm},${la},${lo});
+    way["highway"="residential"][!"surface"](around:${rm},${la},${lo});
+  );out center qt 200;`;
+
+  const queries = strictMode ? [qA] : [qA, qB];
+
+  const results = await Promise.allSettled(
+    queries.map(q =>
+      fetch('https://overpass-api.de/api/interpreter',{
+        method: 'POST',
+        body: 'data=' + encodeURIComponent(q)
+      }).then(r => r.ok ? r.json() : Promise.reject(new Error('Overpass HTTP '+r.status)))
+    )
+  );
+
+  // Pool A: bevorzugte Straßentypen mit expliziter Asphalt-Oberfläche
+  let poolA = [];
+  if(results[0].status === 'fulfilled'){
+    poolA = results[0].value.elements
+      .filter(e => e.center || (e.lat && e.lon))
+      .map(e => ({
+        coord: e.center ? [e.center.lon, e.center.lat] : [e.lon, e.lat],
+        quality: 'asphalt'
+      }));
+  }
+
+  // Pool B: secondary/tertiary ohne Surface-Tag + residential als Fallback
+  let poolB = [];
+  if(!strictMode && results[1]?.status === 'fulfilled'){
+    poolB = results[1].value.elements
+      .filter(e => e.center || (e.lat && e.lon))
+      .map(e => {
+        const hw = e.tags?.highway || '';
+        // Qualitätsstufen: residential bekommt niedrigeren Score-Bonus als tertiary/cycleway
+        const quality = (hw === 'residential') ? 'residential' : 'untagged';
+        return {
+          coord: e.center ? [e.center.lon, e.center.lat] : [e.lon, e.lat],
+          quality
+        };
+      });
+  }
+
+  // Zu wenige Kandidaten? Fehler werfen damit Fallback greift
+  const totalPool = poolA.length + poolB.length;
+  if(totalPool < 10){
+    throw new Error(`Zu wenige Straßen-Kandidaten: ${totalPool}`);
+  }
+
+  // ── 3 Wegpunkte auswählen ──
+  // Für jeden der 3 Winkel (seedAngle + 0/120/240°) den besten Kandidaten wählen.
+  const wps = [];
+
+  for(let i = 0; i < 3; i++){
+    const targetAngle = (seedAngle + i * 120) % 360;
+
+    // Scoring-Funktion:
+    //   - angleDiff:  Abweichung vom Zielwinkel (0°–180°)
+    //   - distScore:  Gaußförmig um targetDist
+    //   - Qualitäts-Bonus nach Straßentyp:
+    //       asphalt     +0.15  (secondary/tertiary/cycleway explizit asphaltiert)
+    //       untagged    +0.05  (secondary/tertiary ohne Surface-Tag)
+    //       residential  0.00  (Wohngebiet — nur wenn nichts Besseres verfügbar)
+    const scored = [...poolA, ...poolB]
+      .map(({ coord, quality }) => {
+        const [cLo, cLa] = coord;
+        const dist = hav(la, lo, cLa, cLo);
+        const bearing = brng(la, lo, cLa, cLo);
+
+        // Winkel-Differenz normiert auf 0–180
+        const angleDiff = Math.abs(((bearing - targetAngle + 540) % 360) - 180);
+
+        // Distanz-Fenster: 20%–180% der Zieldistanz
+        if(angleDiff > 55) return null;
+        if(dist < targetDist * 0.20) return null;
+        if(dist > targetDist * 1.80) return null;
+
+        // Distanz-Score: Gaußförmig um Zieldistanz
+        const distRatio = dist / targetDist;
+        const distScore = Math.exp(-2.5 * Math.pow(distRatio - 1, 2));
+
+        // Winkel-Score: linear, 0° Abweichung = 1.0, 55° Abweichung = 0.0
+        const angleScore = 1 - (angleDiff / 55);
+
+        // Qualitäts-Bonus
+        const qualityBonus = quality === 'asphalt' ? 0.15
+                           : quality === 'untagged' ? 0.05
+                           : 0.00; // residential
+
+        // Gesamtscore: Winkel etwas wichtiger als Distanz
+        const score = angleScore * 0.55 + distScore * 0.45 + qualityBonus;
+
+        return { coord, score, dist };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score);
+
+    if(!scored.length) continue;
+
+    // Diversitätsprüfung: Wegpunkt muss mind. 2 km von bereits gewählten entfernt sein.
+    // Verhindert dass mehrere Wegpunkte im selben Ort landen.
+    const MIN_WP_SEPARATION_KM = 2.0;
+    let chosen = null;
+    for(const candidate of scored){
+      const tooClose = wps.some(([wLo, wLa]) =>
+        hav(wLa, wLo, candidate.coord[1], candidate.coord[0]) < MIN_WP_SEPARATION_KM
+      );
+      if(!tooClose){
+        chosen = candidate.coord;
+        break;
+      }
+    }
+
+    // Fallback: Auch wenn zu nah, nehmen wir den besten Kandidaten (lieber als keinen)
+    if(!chosen && scored.length > 0) chosen = scored[0].coord;
+    if(chosen) wps.push(chosen);
+  }
+
+  return wps;
+}
+
+// ══════════════════════════════════════════
+// HARDCORE ROUNDTRIP (unverändert)
+// ══════════════════════════════════════════
 async function hardcoreRoundtrip(coord, distKm){
   const [lo, la] = coord;
   const radius = Math.min(distKm * 200, 50000);
@@ -743,7 +968,6 @@ async function hardcoreRoundtrip(coord, distKm){
       });
     } catch(e){}
   }
-  // Fallback: einfacher Round-Trip ohne Waldpunkte
   return graphhopper({
     points: [coord],
     profile: 'bike',
@@ -758,8 +982,6 @@ async function hardcoreRoundtrip(coord, distKm){
 }
 
 async function queryForestWps(la, lo, rm, distKm){
-  // 1. Primär: Waldgebiete (bevorzugt)
-  // 2. Fallback: Feldwege/Tracks wenn Wald nicht ausreicht
   const qryForest = `[out:json][timeout:15];(
     way["landuse"="forest"](around:${rm},${la},${lo});
     way["natural"="wood"](around:${rm},${la},${lo});
@@ -772,7 +994,6 @@ async function queryForestWps(la, lo, rm, distKm){
     way["highway"="path"]["bicycle"!="no"](around:${rm},${la},${lo});
   );out center qt 200;`;
 
-  // Beide Queries parallel abfeuern
   const [resF, resT] = await Promise.allSettled([
     fetch('https://overpass-api.de/api/interpreter',{ method:'POST', body:'data='+encodeURIComponent(qryForest) }),
     fetch('https://overpass-api.de/api/interpreter',{ method:'POST', body:'data='+encodeURIComponent(qryTracks) })
@@ -786,7 +1007,6 @@ async function queryForestWps(la, lo, rm, distKm){
       .filter(e => e.center || (e.lat && e.lon))
       .map(e => e.center ? [e.center.lon, e.center.lat] : [e.lon, e.lat]);
   }
-
   if(resT.status==='fulfilled' && resT.value.ok){
     const d = await resT.value.json();
     tracks = d.elements
@@ -794,15 +1014,16 @@ async function queryForestWps(la, lo, rm, distKm){
       .map(e => e.center ? [e.center.lon, e.center.lat] : [e.lon, e.lat]);
   }
 
-  // Wald hat Vorrang — Tracks nur als Ergänzung wenn Wald-Abdeckung dünn
-  // Mischverhältnis: erst Waldpunkte, dann Tracks auffüllen
   const primary   = forests;
   const secondary = tracks;
-
   const targetDist = distKm / 4;
 
+  // Seed-basierter Winkel-Offset: analog zu queryRoadWps()
+  // → jede neue Variante (newVariant) dreht das Dreieck anders
+  const seedAngle = (S.seed % 120);
+
   const wps = [0, 1, 2].map(i => {
-    const angle = (i * 120 + 30) % 360; // 30°, 150°, 270°
+    const angle = (seedAngle + i * 120) % 360;
 
     const best = (pool) => {
       const cands = pool.filter(([fLo, fLa]) => {
@@ -819,15 +1040,15 @@ async function queryForestWps(la, lo, rm, distKm){
       return cands[0];
     };
 
-    // Wald bevorzugen, Feldweg als gleichwertiger Fallback
     return best(primary) || best(secondary);
   }).filter(Boolean);
 
   return wps;
 }
 
-
-// ── ORS (Gravel) ──
+// ══════════════════════════════════════════
+// ORS (Gravel)
+// ══════════════════════════════════════════
 async function ors(profile, body){
   const res = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}/geojson`, {
     method:'POST',
@@ -846,42 +1067,15 @@ async function ors(profile, body){
   return data.features[0];
 }
 
+// ══════════════════════════════════════════
+// ROUNDTRIP DISPATCHER
+// ══════════════════════════════════════════
 async function roundtrip(coord, distKm){
   if(S.bike==='road'){
-    // Bis zu 3 Versuche mit verschiedenen Seeds — verwirft Routen
-    // mit zu vielen "missing surface" Segmenten (Feld-/Schotterwege)
-    const MAX_SURFACE_TRIES = 2;
-    for(let t = 0; t < MAX_SURFACE_TRIES; t++){
-      const seed = t === 0 ? S.seed : rnd();
-      if(t > 0){
-        setStatus(`Prüfe Oberflächen… (Versuch ${t+1})`);
-        await new Promise(r => setTimeout(r, 1200)); // Rate-Limit Pause
-      }
-      const res = await graphhopper({
-        points:[coord],
-        profile:'bike',
-        algorithm:'round_trip',
-        'round_trip.distance': distKm*1000,
-        'round_trip.seed': seed,
-        points_encoded:false,
-        elevation:true,
-        details:['surface','road_class'],
-        custom_model: roadCustomModel()
-      });
-      const check = validateRoadSurface(res.ghPath||{});
-      if(check.ok) return res;
-      if(t === MAX_SURFACE_TRIES-1){
-        // Letzter Versuch war immer noch nicht sauber → Route trotzdem nehmen
-        // aber mit Flag markieren damit der User informiert wird
-        res.surfaceWarning = true;
-        res.surfaceDetail  = check.detail;
-        return res;
-      }
-    }
+    return roadRoundtrip(coord, distKm);
   } else if(S.bike==='hardcore'){
-    return await hardcoreRoundtrip(coord, distKm);
+    return hardcoreRoundtrip(coord, distKm);
   } else {
-    // ORS — Gravel, Waldwege bevorzugen
     return ors('cycling-mountain',{
       coordinates:[coord],
       options:{
@@ -922,9 +1116,9 @@ async function waypoints(coords){
   }
 }
 
-// ──────────────────────────────────────────
+// ══════════════════════════════════════════
 // SHADE ROUTING
-// ──────────────────────────────────────────
+// ══════════════════════════════════════════
 async function planShade(){
   const [lo,la] = S.coord;
   const radius = Math.min(S.dist*180, 40000);
@@ -932,10 +1126,8 @@ async function planShade(){
   setStatus('Suche schattige Wege…');
 
   if(S.bike==='road'){
-    // Rennrad: NUR Parks — haben befestigte Wege, keine Wald-/Sandpfade
     try { shadePoints = await queryParks(la,lo,radius); } catch{}
   } else {
-    // Gravel/Hardcore: Wälder + Parks
     try { shadePoints = await queryForests(la,lo,radius); } catch{}
   }
 
@@ -945,25 +1137,16 @@ async function planShade(){
       try { return await waypoints([S.coord,...wps,S.coord]); } catch{}
     }
   }
-  // Fallback: normaler Rundkurs
   return roundtrip(S.coord, S.dist);
 }
 
-// Parks: Rennrad-sicher — wir fragen keine Park-Zentroide ab,
-// sondern asphaltierte Straßen IN DER NÄHE von Parks.
-// Grund: GH snappt Wegpunkte auf den nächsten routbaren Punkt —
-// Park-Zentroide landen oft auf Schotterwegen. Straßenknoten
-// garantieren Asphalt unabhängig vom roadCustomModel().
 async function queryParks(la,lo,rm){
-  // Schritt 1: Parks finden (als Referenzpunkte)
   const qParks = `[out:json][timeout:12];(
     way["leisure"="park"](around:${rm},${la},${lo});
     way["landuse"="recreation_ground"](around:${rm},${la},${lo});
     relation["leisure"="park"](around:${rm},${la},${lo});
   );out center qt 40;`;
 
-  // Schritt 2: Asphaltierte Straßen in der Nähe
-  // Diese Knoten liegen garantiert auf fahrbarem Untergrund
   const qRoads = `[out:json][timeout:12];(
     way["highway"~"^(secondary|tertiary|residential|cycleway|unclassified)$"]
        ["surface"~"^(asphalt|paved|concrete)$"](around:${rm},${la},${lo});
@@ -987,21 +1170,18 @@ async function queryParks(la,lo,rm){
     roads = d.elements.filter(e=>e.center||e.lat).map(e=>e.center?[e.center.lon,e.center.lat]:[e.lon,e.lat]);
   }
 
-  if(!roads.length) return parks; // Fallback auf Park-Zentroide wenn keine Straßen gefunden
+  if(!roads.length) return parks;
 
-  // Pro Park-Punkt die nächstgelegene asphaltierte Straße wählen
-  // → Wegpunkt liegt auf sicherem Untergrund, ist aber trotzdem "nah am Park"
   return parks.map(([pLo, pLa]) => {
     let best = null, bestD = Infinity;
     for(const [rLo, rLa] of roads){
       const d = hav(pLa, pLo, rLa, rLo);
       if(d < bestD){ bestD = d; best = [rLo, rLa]; }
     }
-    return best || [pLo, pLa]; // Fallback auf Park-Zentroid
+    return best || [pLo, pLa];
   });
 }
 
-// Wälder + Parks: für Gravel/Hardcore
 async function queryForests(la,lo,rm){
   const q = `[out:json][timeout:12];(
     way["landuse"="forest"](around:${rm},${la},${lo});
@@ -1043,19 +1223,15 @@ function renderRoute(feature){
   const lls = coords.map(c=>[c[1],c[0]]);
   const col = routeColor();
 
-  // Shadow
   L.polyline(lls,{color:'rgba(0,0,0,.25)',weight:7,lineCap:'round',lineJoin:'round'}).addTo(S.rg);
-  // Route — halbtransparent damit der Untergrund (Wegtyp) sichtbar bleibt
   L.polyline(lls,{color:col,weight:5,opacity:0.55,lineCap:'round',lineJoin:'round'}).addTo(S.rg);
 
   S.map.fitBounds(L.latLngBounds(lls),{padding:[40,40]});
 
-  // Legend
   q('legColor').style.background = col;
   q('legLabel').textContent = S.hot?'Schattige Route':S.bike==='road'?'Rennrad Route':S.bike==='hardcore'?'Hardcore Gravel':'Gravel Route';
   q('legend').classList.add('on');
 
-  // Re-place start marker above route
   if(S.sm) S.map.removeLayer(S.sm);
   placeStart();
 }
@@ -1203,7 +1379,6 @@ const SURF_DE = {
 };
 
 function parseSurfaceDetails(path){
-  // GH details.surface = [[fromIdx, toIdx, "surface_name"], ...]
   const segs = path.details?.surface;
   const coords = path.points?.coordinates;
   if(!segs || !coords) return null;
@@ -1227,10 +1402,8 @@ function drawSurface(breakdown){
   const total = Object.values(breakdown).reduce((a,b)=>a+b, 0);
   if(total < 0.01){ wrap.style.display='none'; return; }
 
-  // Sort by distance desc
   const entries = Object.entries(breakdown).sort((a,b)=>b[1]-a[1]);
 
-  // Bar
   const bar = q('surfBar');
   bar.innerHTML = entries.map(([k,d])=>{
     const pct = (d/total*100).toFixed(1);
@@ -1238,7 +1411,6 @@ function drawSurface(breakdown){
     return `<div class="surf-seg" style="width:${pct}%;background:${col}" title="${SURF_DE[k]||k}: ${pct}%"></div>`;
   }).join('');
 
-  // List
   const list = q('surfList');
   list.innerHTML = entries.map(([k,d])=>{
     const pct = (d/total*100).toFixed(0);
@@ -1274,15 +1446,11 @@ function brng(la1,lo1,la2,lo2){
 
 // ══════════════════════════════════════════
 // BACKTRACK REMOVAL
-// Erkennt kurze Out-and-Back-Nadeln und entfernt sie.
-// Logik: Wenn Punkte i und j nah beieinander liegen UND
-// der Weg i→…→j kürzer als MAX_SPIKE_KM ist,
-// handelt es sich um einen sinnlosen Abstecher.
 // ══════════════════════════════════════════
 function removeBacktracks(coords){
-  const SNAP_KM   = 0.07;  // 70 m — gilt als "gleicher Ort"
-  const MAX_SPIKE = 1.8;   // Abstecher bis 1,8 km werden entfernt
-  const LOOK      = 100;   // Suchfenster (Performance)
+  const SNAP_KM   = 0.07;
+  const MAX_SPIKE = 1.8;
+  const LOOK      = 100;
 
   let pts = coords.slice();
   let changed = true;
@@ -1313,7 +1481,6 @@ function cleanRoute(feature){
   feature.geometry.coordinates = removeBacktracks(feature.geometry.coordinates);
   return feature;
 }
-
 
 // ══════════════════════════════════════════
 // UI HELPERS
