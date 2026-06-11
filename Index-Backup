@@ -13,8 +13,10 @@
   --bg:#0c1220;--panel:#111827;--card:#1a2336;--border:#253048;
   --accent:#22c55e;--accent-dim:rgba(34,197,94,.14);
   --warm:#f59e0b;--warm-dim:rgba(245,158,11,.12);
-  --blue:#3b82f6;--blue-dim:rgba(59,130,246,.13);
-  --orange:#f97316;--orange-dim:rgba(249,115,22,.13);
+  --blue:#94a3b8;--blue-dim:rgba(148,163,184,.13);
+  --orange:#4ade80;--orange-dim:rgba(74,222,128,.13);
+  --red:#e11d48;--red-dim:rgba(225,29,72,.13);
+  --red:#e11d48;--red-dim:rgba(225,29,72,.13);
   --text:#e2e8f0;--muted:#64748b;--danger:#ef4444;--r:10px;
 }
 html,body{height:100%}
@@ -61,6 +63,12 @@ header{height:54px;background:var(--panel);border-bottom:1px solid var(--border)
 .bc-sub{font-size:10px;color:var(--muted);line-height:1.3}
 .bike-card.ar{border-color:var(--blue);background:var(--blue-dim)}.bike-card.ar .bc-title{color:var(--blue)}
 .bike-card.ag{border-color:var(--orange);background:var(--orange-dim)}.bike-card.ag .bc-title{color:var(--orange)}
+.bike-card.ahc{border-color:var(--red);background:var(--red-dim)}.bike-card.ahc .bc-title,.bike-card.ahc .bc-icon{color:var(--red)}
+.bike-card.full{grid-column:1/-1;flex-direction:row;gap:12px;text-align:left;padding:11px 14px;align-items:center}
+.bike-card.full .bc-sub{text-align:left}
+.bike-card.ahc{border-color:var(--red);background:var(--red-dim)}.bike-card.ahc .bc-title{color:var(--red)}
+.bike-card.full{grid-column:1/-1;flex-direction:row;gap:12px;text-align:left;padding:10px 14px}
+.bike-card.full .bc-sub{flex:1}
 
 /* Distance */
 .dist-top{display:flex;align-items:baseline;gap:6px;margin-bottom:10px}
@@ -100,10 +108,12 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
 .stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
 .stat-box{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 5px;text-align:center}
 .sv{font-family:'Bebas Neue',sans-serif;font-size:19px;line-height:1}
-.sv.road{color:var(--blue)}.sv.gravel{color:var(--orange)}.sv.shade{color:var(--accent)}
+.sv.road{color:var(--blue)}.sv.gravel{color:var(--orange)}.sv.hardcore{color:var(--red)}.sv.shade{color:var(--accent)}
 .sl{font-size:10px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.5px}
 .ele-wrap{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;display:none}
 .ele-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.surf-warn{display:none;padding:9px 11px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:12px;color:#fde68a;line-height:1.5;margin-bottom:10px}
+.surf-warn.on{display:block}
 .shade-tag{display:none;align-items:center;gap:4px;padding:3px 9px;background:var(--warm-dim);border:1px solid rgba(245,158,11,.25);border-radius:20px;font-size:11px;color:var(--warm);margin-bottom:10px}
 .shade-tag.on{display:inline-flex}
 .acts{display:flex;flex-direction:column;gap:7px}
@@ -121,12 +131,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
 .tile-tog{top:12px;right:50px;background:rgba(17,24,39,.92);border:1px solid var(--border);border-radius:8px;padding:4px;display:flex;gap:2px;backdrop-filter:blur(8px)}
 .t-btn{padding:4px 10px;border-radius:5px;font-size:11px;font-weight:500;border:none;background:transparent;color:var(--muted);cursor:pointer;transition:all .15s}
 .t-btn.on{background:var(--accent);color:#000}
-.edit-bar{top:0;left:0;right:0;background:rgba(245,158,11,.97);color:#000;padding:10px 14px;display:none;align-items:center;gap:10px;font-size:13px;font-weight:500}
-.edit-bar.on{display:flex}
-.eb-txt{flex:1;font-size:12px}
-.sm-btn{padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;white-space:nowrap;transition:all .15s}
-.sm-dark{background:rgba(0,0,0,.2);color:#000}.sm-dark:hover{background:rgba(0,0,0,.35)}
-.sm-solid{background:#000;color:#fff}.sm-solid:hover{background:#1a1a1a}
+
 .hint-wrap{inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
 .hint-card{background:rgba(17,24,39,.9);border:1px solid var(--border);border-radius:14px;padding:18px 24px;text-align:center;font-size:14px;color:var(--muted);line-height:1.8;backdrop-filter:blur(8px)}
 .hint-card strong{color:var(--text)}
@@ -135,6 +140,19 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
 .leg-item{display:flex;align-items:center;gap:7px;margin-bottom:3px}
 .leg-item:last-child{margin-bottom:0}
 .leg-line{width:24px;height:3px;border-radius:2px}
+
+/* ── SURFACE ANALYSIS ── */
+.surf-wrap{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:11px;margin-bottom:10px;display:none}
+.surf-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.surf-bar{display:flex;height:10px;border-radius:5px;overflow:hidden;margin-bottom:10px;gap:1px}
+.surf-seg{height:100%;transition:width .5s ease;min-width:2px}
+.surf-list{display:flex;flex-direction:column;gap:5px}
+.surf-item{display:flex;align-items:center;gap:7px}
+.surf-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.surf-name{font-size:11px;color:var(--text);flex:1;text-transform:capitalize}
+.surf-pct{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.surf-km{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:42px;text-align:right}
+.surf-no{font-size:11px;color:var(--muted);font-style:italic}
 
 /* Leaflet theme */
 .leaflet-popup-content-wrapper{background:#1a2336;color:#e2e8f0;border:1px solid #253048;border-radius:10px}
@@ -157,10 +175,13 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
   <div class="hdivider"></div>
   <span style="font-size:12px;color:var(--muted)">Fahrradrouten Planer</span>
   <div class="api-zone">
-    <span class="api-dot" id="apiDot"></span>
-    <span class="api-lbl">ORS API Key</span>
-    <input type="password" class="api-in" id="apiIn" placeholder="dein kostenloser Key…" autocomplete="off">
-    <a href="https://openrouteservice.org/dev/#/login" target="_blank" class="api-link">→ Kostenlos holen</a>
+    <span class="api-dot" id="apiDotGH"></span>
+    <span class="api-lbl">GH Key</span>
+    <input type="password" class="api-in" id="apiInGH" placeholder="GraphHopper Key (Rennrad)" autocomplete="off" style="width:170px">
+    <span class="api-dot" id="apiDotORS" style="margin-left:6px"></span>
+    <span class="api-lbl">ORS Key</span>
+    <input type="password" class="api-in" id="apiIn" placeholder="ORS Key (Gravel)" autocomplete="off" style="width:150px">
+    <a href="https://graphhopper.com/dashboard" target="_blank" class="api-link">→ Keys holen</a>
   </div>
 </header>
 
@@ -192,6 +213,13 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
           <div class="bc-icon">🚵</div>
           <div class="bc-title">Gravel</div>
           <div class="bc-sub">Wald-, Schotter- &amp; Trails</div>
+        </div>
+        <div class="bike-card full" id="cHard" onclick="setBike('hardcore')">
+          <div class="bc-icon">💀</div>
+          <div style="flex:1">
+            <div class="bc-title">Hardcore Gravel</div>
+            <div class="bc-sub">Schotter · Sand · unbefestigter Boden · feiner Kies priorisiert</div>
+          </div>
         </div>
       </div>
     </div>
@@ -233,6 +261,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
     <div class="results sb" id="results">
       <div class="sb-lbl">Deine Route</div>
       <div class="shade-tag" id="shadeTag">🌿 Schattige Route aktiv</div>
+      <div class="surf-warn" id="surfWarnTag">
+        ⚠️ <strong>Keine perfekte Strecke gefunden.</strong>
+        Die Route enthält möglicherweise kurze unbefestigte Abschnitte.
+        Du kannst sie trotzdem nutzen oder eine neue Berechnung starten.
+      </div>
       <div class="stats-grid">
         <div class="stat-box"><div class="sv" id="sD">—</div><div class="sl">Distanz</div></div>
         <div class="stat-box"><div class="sv" id="sE">—</div><div class="sl">Höhenmeter</div></div>
@@ -242,12 +275,14 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
         <div class="ele-lbl">Höhenprofil</div>
         <div id="eleChart"></div>
       </div>
+      <div class="surf-wrap" id="surfWrap">
+        <div class="surf-lbl">Untergrundanalyse</div>
+        <div class="surf-bar" id="surfBar"></div>
+        <div class="surf-list" id="surfList"></div>
+      </div>
       <div class="acts">
         <button class="btn btn-g" onclick="exportGPX()">⬇ Als GPX herunterladen</button>
-        <div class="btn-2">
-          <button class="btn btn-q" onclick="enterEdit()">✏️ Anpassen</button>
-          <button class="btn btn-q" onclick="newVariant()">🔀 Neue Route</button>
-        </div>
+        <button class="btn btn-q" onclick="newVariant()">🔀 Neue Route</button>
       </div>
     </div>
 
@@ -260,13 +295,6 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
     <div class="mover tile-tog">
       <button class="t-btn on" id="tOsm" onclick="setTile('osm')">Karte</button>
       <button class="t-btn" id="tTopo" onclick="setTile('topo')">Topo</button>
-    </div>
-
-    <!-- Edit bar -->
-    <div class="mover edit-bar" id="editBar">
-      <div class="eb-txt">✏️ <strong>Bearbeitungsmodus</strong> — Ziehe die Marker oder klicke auf die Karte für neue Wegpunkte. Doppelklick auf Marker entfernt ihn.</div>
-      <button class="sm-btn sm-solid" onclick="applyEdit()">✓ Aktualisieren</button>
-      <button class="sm-btn sm-dark" onclick="exitEdit()">✕ Abbrechen</button>
     </div>
 
     <!-- Hint -->
@@ -287,23 +315,23 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
 // STATE
 // ══════════════════════════════════════════
 const S = {
-  key: localStorage.getItem('vr_key') || '',
-  coord: null,       // [lon,lat]
+  keyGH:  (localStorage.getItem('vr_key_gh')  || '').replace(/[^ -~]/g,'').trim(),
+  keyORS: (localStorage.getItem('vr_key_ors') || '').replace(/[^ -~]/g,'').trim(),
+  coord: null,
   name: '',
   bike: 'road',
   dist: 50,
   hot: false,
   route: null,
   seed: rnd(),
-  mode: 'plan',
   map: null,
   tiles: {},
   tile: 'osm',
-  rg: null,          // route layer group
-  sm: null,          // start marker
-  em: [],            // edit markers
+  rg: null,
+  sm: null,
 };
 function rnd(){ return Math.floor(Math.random()*9999); }
+function sanitize(v){ return v.replace(/[^ -~]/g,'').trim(); }
 
 // ══════════════════════════════════════════
 // INIT
@@ -320,14 +348,21 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   S.rg = L.layerGroup().addTo(S.map);
-  S.map.on('click', onMapClick);
 
-  if(S.key){ q('apiIn').value = S.key; dot('ok'); }
+  if(S.keyGH){  q('apiInGH').value = S.keyGH;  dotGH('ok');  }
+  if(S.keyORS){ q('apiIn').value   = S.keyORS; dotORS('ok'); }
 
+  q('apiInGH').addEventListener('change', e => {
+    S.keyGH = sanitize(e.target.value);
+    q('apiInGH').value = S.keyGH;
+    localStorage.setItem('vr_key_gh', S.keyGH);
+    dotGH(S.keyGH ? 'ok' : '');
+  });
   q('apiIn').addEventListener('change', e => {
-    S.key = e.target.value.trim();
-    localStorage.setItem('vr_key', S.key);
-    dot(S.key ? 'ok' : '');
+    S.keyORS = sanitize(e.target.value);
+    q('apiIn').value = S.keyORS;
+    localStorage.setItem('vr_key_ors', S.keyORS);
+    dotORS(S.keyORS ? 'ok' : '');
   });
   q('dSlider').addEventListener('input', e => {
     S.dist = +e.target.value;
@@ -340,7 +375,8 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 function q(id){ return document.getElementById(id); }
-function dot(s){ q('apiDot').className = 'api-dot'+(s?' '+s:''); }
+function dotGH(s){  q('apiDotGH').className  = 'api-dot'+(s?' '+s:''); }
+function dotORS(s){ q('apiDotORS').className = 'api-dot'+(s?' '+s:''); }
 
 // ══════════════════════════════════════════
 // TILE LAYER
@@ -360,6 +396,7 @@ function setBike(t){
   S.bike = t;
   q('cRoad').className = 'bike-card'+(t==='road'?' ar':'');
   q('cGrav').className = 'bike-card'+(t==='gravel'?' ag':'');
+  q('cHard').className = 'bike-card full'+(t==='hardcore'?' ahc':'');
 }
 
 // ══════════════════════════════════════════
@@ -419,16 +456,47 @@ function placeStart(){
 
 // ══════════════════════════════════════════
 // ROUTE PLANNING
+// Rennrad → GraphHopper (custom_model: nur Asphalt)
+// Gravel  → ORS (cycling-mountain, Schotter/Trails)
 // ══════════════════════════════════════════
 async function planRoute(){
-  if(!S.key){ err('routeErr','Bitte gib deinen ORS API Key ein (kostenlos auf openrouteservice.org).'); return; }
+  if((S.bike==='road'||S.bike==='hardcore') && !S.keyGH){
+    err('routeErr','Bitte GraphHopper API Key eingeben (kostenlos: graphhopper.com/dashboard).');
+    return;
+  }
+  if(S.bike==='gravel' && !S.keyORS){
+    err('routeErr','Bitte ORS API Key eingeben (kostenlos: openrouteservice.org).');
+    return;
+  }
   if(!S.coord){ err('routeErr','Bitte zuerst einen Startpunkt wählen.'); return; }
   err('routeErr',''); loading(true);
 
   try {
-    const feature = S.hot ? await planShade() : await roundtrip(S.coord, S.dist);
+    // ── Distanz-kontrollierte Retry-Schleife ──
+    // Wenn die Route mehr als 10 km über der Zieldistanz liegt,
+    // wird der Hint proportional nach unten skaliert und neu berechnet.
+    const MAX_OVER_KM = 10;
+    const MAX_TRIES   = 2;
+    let hintDist = S.dist;
+    let feature;
+
+    for(let attempt = 0; attempt < MAX_TRIES; attempt++){
+      if(attempt > 0) await new Promise(r => setTimeout(r, 1000)); // Rate-Limit Pause
+      setStatus(attempt === 0 ? 'Berechne Route…' : `Passe Distanz an… (${hintDist.toFixed(0)} km)`);
+      const raw = S.hot ? await planShade() : await roundtrip(S.coord, hintDist);
+      setStatus('Bereinige Route…');
+      feature = cleanRoute(raw);
+
+      const actualKm = feature.properties.summary.distance / 1000;
+      if(actualKm <= S.dist + MAX_OVER_KM) break; // passt — fertig
+
+      // Proportional skalieren: z.B. Ziel 50 km, Ergebnis 80 km → neuer Hint: 50*(50/80) ≈ 31 km
+      const scaled = Math.max(10, hintDist * (S.dist / actualKm));
+      if(Math.abs(scaled - hintDist) < 1) break; // kein Fortschritt mehr — abbrechen
+      hintDist = scaled;
+    }
+
     S.route = feature;
-    S.mode = 'review';
     renderRoute(feature);
     showResults(feature);
     q('hint').style.display = 'none';
@@ -437,71 +505,421 @@ async function planRoute(){
   } finally { loading(false); }
 }
 
-// ORS options per bike type
-function bikeOpts(extra={}){
-  if(S.bike==='road'){
-    return {
-      // surface:1.0 = maximale Präferenz für asphaltierten Untergrund
-      // highways-Vermeidung von Treppen, Fähren, unbefestigten Wegen
-      avoid_features:['steps','ferries','fords'],
-      profile_params:{
-        weightings:{
-          surface:1.0,      // strikt asphalt/paved bevorzugen
-          green:0.0,        // keine Grün-/Naturwege
-          quiet:0.1
-        },
-        restrictions:{
-          surface_type:'paved'   // nur befestigte Oberflächen
-        }
-      },
-      ...extra
-    };
-  } else {
-    // Gravel: Schotter, Waldwege, Trails erlaubt — surface-Präferenz niedrig
-    return {
-      avoid_features:['steps','ferries'],
-      profile_params:{
-        weightings:{
-          surface:0.1,
-          green:0.6,
-          quiet:0.3
-        }
-      },
-      ...extra
-    };
+// ── GRAPHHOPPER (Rennrad — strikt asphaltiert) ──
+// custom_model penalisiert unbefestigte Oberflächen mit Faktor 0.01
+// → ORS-Umgehung: GH filtert auf Netzwerk-Ebene
+async function graphhopper(body){
+  const key = sanitize(S.keyGH);
+  const res = await fetch(`https://graphhopper.com/api/1/route?key=${encodeURIComponent(key)}`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  });
+  if(!res.ok){
+    const e = await res.json().catch(()=>({}));
+    const msg = e?.message||e?.hints?.[0]?.message||'';
+    if(res.status===401||res.status===403) throw new Error('Ungültiger GraphHopper Key. Bitte auf graphhopper.com/dashboard prüfen.');
+    if(res.status===429) throw new Error('GraphHopper Limit erreicht. Kurz warten und erneut versuchen.');
+    throw new Error('Routenplanung fehlgeschlagen'+(msg?': '+msg:'.'));
   }
+  const data = await res.json();
+  if(!data.paths?.length) throw new Error('Keine Route gefunden. Bitte anderen Startpunkt wählen.');
+  const path = data.paths[0];
+  const surfBreakdown = parseSurfaceDetails(path);
+  const feature = {
+    type:'Feature',
+    geometry: path.points,
+    properties:{
+      summary:{ distance: path.distance, duration: path.time/1000 },
+      segments:[{ ascent: path.ascend||0 }],
+      surfBreakdown
+    }
+  };
+  // ghPath wird für validateRoadSurface benötigt (road_class + surface details)
+  feature.ghPath = path;
+  return feature;
 }
 
-async function roundtrip(coord, distKm){
-  const profile = S.bike==='road' ? 'cycling-road' : 'cycling-mountain';
-  return ors(profile, {
-    coordinates:[coord],
-    options: bikeOpts({ round_trip:{ length:distKm*1000, points:5, seed:S.seed } }),
-    elevation:true
+function roadCustomModel(){
+  // GH Free Plan — nur validierte Enums, multiply_by max 1.0
+  // SERVICE roads: viele Wirtschaftswege ohne Surface-Tag → stark bestrafen
+  // TRACK + PATH: hart geblockt
+  // Bekannte unbefestigte Oberflächen: hart geblockt
+  // "Missing surface": wird per Post-Processing (validateRoadSurface)
+  //  abgefangen — GH Free Plan unterstützt keine surface==MISSING Regel
+  return {
+    distance_influence: 25,
+    speed:[
+      {if:'road_class == TRACK',    limit_to:'1'},
+      {if:'road_class == PATH',     limit_to:'1'},
+      {if:'surface == GRAVEL',      limit_to:'1'},
+      {if:'surface == FINE_GRAVEL', limit_to:'1'},
+      {if:'surface == GROUND',      limit_to:'1'},
+      {if:'surface == DIRT',        limit_to:'1'},
+      {if:'surface == SAND',        limit_to:'1'},
+      {if:'surface == GRASS',       limit_to:'1'},
+      {if:'surface == COMPACTED',   limit_to:'1'}
+    ],
+    priority:[
+      {if:'road_class == TRACK',    multiply_by:'0.01'},
+      {if:'road_class == PATH',     multiply_by:'0.01'},
+      // SERVICE: Wirtschaftswege oft ohne Surface → stark bestrafen
+      {if:'road_class == SERVICE',  multiply_by:'0.05'},
+      {if:'surface == GRAVEL',      multiply_by:'0.01'},
+      {if:'surface == FINE_GRAVEL', multiply_by:'0.01'},
+      {if:'surface == GROUND',      multiply_by:'0.01'},
+      {if:'surface == DIRT',        multiply_by:'0.01'},
+      {if:'surface == SAND',        multiply_by:'0.01'},
+      {if:'surface == GRASS',       multiply_by:'0.01'},
+      {if:'surface == COMPACTED',   multiply_by:'0.01'}
+    ]
+  };
+}
+
+
+
+
+// ══════════════════════════════════════════
+// SURFACE VALIDATOR (Post-Processing)
+// Löst das "missing surface" Problem das GH Free Plan nicht
+// direkt im custom_model abfangen kann.
+//
+// Logik: GH gibt details.surface zurück. Segmente ohne
+// Surface-Tag erscheinen als null. Wir berechnen den
+// Anteil verdächtiger Segmente und lehnen die Route ab
+// wenn er zu hoch ist.
+//
+// Risk-Score pro Segment:
+//   surface = null + road_class in [TRACK,PATH,SERVICE] → 100 Pkt (verwerfen)
+//   surface = null + road_class = UNCLASSIFIED           →  40 Pkt
+//   surface = null + sonstige Klasse                     →  15 Pkt
+//   surface bekannt und gut (asphalt, paved, concrete)   →   0 Pkt
+//   surface bekannt und schlecht                         → geblockt durch custom_model
+//
+// Rückgabe: { ok: bool, riskPct: number, details: string }
+// ══════════════════════════════════════════
+function validateRoadSurface(path){
+  const surfSegs  = path.details?.surface    || [];
+  const classSegs = path.details?.road_class || [];
+  const coords    = path.points?.coordinates || [];
+  if(!surfSegs.length || !coords.length) return { ok: true, riskPct: 0 };
+
+  // Baue pro Koordinaten-Index eine Map: index → road_class
+  const classAt = {};
+  for(const [from, to, cls] of classSegs){
+    for(let i = from; i < to; i++) classAt[i] = (cls||'').toUpperCase();
+  }
+
+  // Harte Sperren: Diese road_class darf NIEMALS in einer Rennrad-Route erscheinen
+  const HARD_BLOCK  = new Set(['TRACK','PATH','BRIDLEWAY','FOOTWAY','STEPS']);
+  // Risiko-Klassen: erlaubt aber nur mit bekannter guter Oberfläche
+  const RISKY_CLASS = new Set(['SERVICE','UNCLASSIFIED']);
+  const GOOD_SURF   = new Set(['asphalt','paved','concrete','paving_stones','cobblestone']);
+  const BAD_SURF    = new Set(['gravel','fine_gravel','ground','dirt','sand','grass','compacted']);
+
+  let totalDist = 0, riskDist = 0;
+  let hardViolation = false;
+  let hardViolationClass = '';
+
+  for(const [from, to, surf] of surfSegs){
+    let segDist = 0;
+    for(let i = from; i < to && i+1 < coords.length; i++){
+      segDist += hav(coords[i][1], coords[i][0], coords[i+1][1], coords[i+1][0]);
+    }
+    totalDist += segDist;
+
+    const surfNorm = (surf||'').toLowerCase().trim();
+    const cls      = classAt[from] || '';
+    const missing  = !surf || surf === 'null' || surfNorm === '' || surfNorm === 'unknown';
+
+    // ── Harte Sperre: TRACK/PATH im Ergebnis = sofort ablehnen ──
+    if(HARD_BLOCK.has(cls)){
+      hardViolation = true;
+      hardViolationClass = cls;
+      riskDist += segDist;
+      continue;
+    }
+
+    // ── Schlechte bekannte Oberfläche = fast volle Anrechnung ──
+    if(BAD_SURF.has(surfNorm)){
+      riskDist += segDist * 0.9;
+      continue;
+    }
+
+    // ── Missing surface: Risiko abhängig von Straßenklasse ──
+    if(missing){
+      if(RISKY_CLASS.has(cls)){
+        // SERVICE/UNCLASSIFIED ohne Surface = hohes Risiko (Wichmannsdorfer-Weg-Problem)
+        riskDist += segDist * 0.7;
+      } else {
+        // PRIMARY/SECONDARY/TERTIARY/RESIDENTIAL ohne Surface = vertretbar
+        riskDist += segDist * 0.05;
+      }
+    }
+    // Gute bekannte Oberfläche → kein Risiko
+  }
+
+  const riskPct = totalDist > 0 ? (riskDist / totalDist) * 100 : 0;
+
+  // Schwellenwerte:
+  // Hard violation (TRACK/PATH tatsächlich in Route) → immer ablehnen
+  // >8% Risiko → ablehnen (war 15%, jetzt strenger)
+  const MAX_RISK_PCT = 5;
+  const ok = !hardViolation && riskPct <= MAX_RISK_PCT;
+
+  return {
+    ok,
+    riskPct: Math.round(riskPct),
+    hardViolation,
+    detail: hardViolation
+      ? `Gesperrter Wegtyp in Route: ${hardViolationClass}`
+      : `${Math.round(riskPct)}% risikobehaftete Oberfläche`
+  };
+}
+
+// ── GRAPHHOPPER (Hardcore Gravel — unbefestigt priorisiert) ──
+// Invertierte Logik: Asphalt/Beton bekommt Malus → GRAVEL, GROUND, SAND,
+// FINE_GRAVEL, TRACK und PATH behalten volle Priorität 1.0 und werden
+// vom Round-Trip-Algorithmus aktiv bevorzugt.
+function hardcoreGravelCustomModel(){
+  // distance_influence: hoher Wert = Algo nimmt gerne längere Umwege
+  // für bessere (= unbefestigte) Oberflächen.
+  // Logik: Alles ohne Asphalt/Beton hat Prio 1.0 → wird aktiv gesucht.
+  // Asphalt/Beton bekommt extrem niedrige Prio → nur wenn absolut keine
+  // andere Verbindung existiert.
+  return {
+    distance_influence: 150,
+    priority:[
+      // ── ASPHALT / BETON: komplett unerwünscht ──
+      {if:'surface == ASPHALT',        multiply_by:'0.02'},
+      {if:'surface == CONCRETE',       multiply_by:'0.02'},
+      {if:'surface == PAVING_STONES',  multiply_by:'0.04'},
+      {if:'surface == COBBLESTONE',    multiply_by:'0.06'},
+      // ── UNBEFESTIGT: maximale Priorität ──
+      {if:'surface == GRAVEL',         multiply_by:'3.0'},
+      {if:'surface == FINE_GRAVEL',    multiply_by:'3.0'},
+      {if:'surface == GROUND',         multiply_by:'2.8'},
+      {if:'surface == DIRT',           multiply_by:'2.8'},
+      {if:'surface == SAND',           multiply_by:'2.5'},
+      {if:'surface == GRASS',          multiply_by:'2.2'},
+      {if:'surface == COMPACTED',      multiply_by:'2.5'},
+      // ── WEGE-TYPEN: Schotter-/Waldwege maximal bevorzugen ──
+      {if:'road_class == TRACK',       multiply_by:'3.0'},
+      {if:'road_class == PATH',        multiply_by:'2.5'},
+      // ── STRASSEN: sperren ──
+      {if:'road_class == MOTORWAY',    multiply_by:'0.01'},
+      {if:'road_class == TRUNK',       multiply_by:'0.01'},
+      {if:'road_class == PRIMARY',     multiply_by:'0.03'},
+      {if:'road_class == SECONDARY',   multiply_by:'0.05'}
+    ],
+    speed:[
+      // Asphalt massiv verlangsamen → Umweg über Schotter lohnt sich
+      {if:'surface == ASPHALT',   limit_to:'5'},
+      {if:'surface == CONCRETE',  limit_to:'5'}
+    ]
+  };
+}
+
+// ── HARDCORE ROUNDTRIP: Waldwegpunkte erzwingen ──
+// Strategie: Overpass liefert Waldgebiete → Zentroide als Pflicht-Wegpunkte.
+// Route wird durch den Wald gezogen, Kanalwege fallen raus.
+async function hardcoreRoundtrip(coord, distKm){
+  const [lo, la] = coord;
+  const radius = Math.min(distKm * 200, 50000);
+  let forestWps = [];
+  setStatus('Suche Wald- & Feldwege…');
+  try { forestWps = await queryForestWps(la, lo, radius, distKm); } catch(e){}
+
+  if(forestWps.length >= 2){
+    setStatus('Optimiere Route durch Wald…');
+    try {
+      return await graphhopper({
+        points: [coord, ...forestWps, coord],
+        profile: 'bike',
+        points_encoded: false,
+        elevation: true,
+        details: ['surface'],
+        custom_model: hardcoreGravelCustomModel()
+      });
+    } catch(e){}
+  }
+  // Fallback: einfacher Round-Trip ohne Waldpunkte
+  return graphhopper({
+    points: [coord],
+    profile: 'bike',
+    algorithm: 'round_trip',
+    'round_trip.distance': distKm * 1000,
+    'round_trip.seed': S.seed,
+    points_encoded: false,
+    elevation: true,
+    details: ['surface'],
+    custom_model: hardcoreGravelCustomModel()
   });
 }
 
-async function waypoints(coords){
-  const profile = S.bike==='road' ? 'cycling-road' : 'cycling-mountain';
-  return ors(profile, { coordinates:coords, options:bikeOpts(), elevation:true });
+async function queryForestWps(la, lo, rm, distKm){
+  // 1. Primär: Waldgebiete (bevorzugt)
+  // 2. Fallback: Feldwege/Tracks wenn Wald nicht ausreicht
+  const qryForest = `[out:json][timeout:15];(
+    way["landuse"="forest"](around:${rm},${la},${lo});
+    way["natural"="wood"](around:${rm},${la},${lo});
+    relation["landuse"="forest"](around:${rm},${la},${lo});
+    relation["natural"="wood"](around:${rm},${la},${lo});
+  );out center qt 120;`;
+
+  const qryTracks = `[out:json][timeout:15];(
+    way["highway"="track"](around:${rm},${la},${lo});
+    way["highway"="path"]["bicycle"!="no"](around:${rm},${la},${lo});
+  );out center qt 200;`;
+
+  // Beide Queries parallel abfeuern
+  const [resF, resT] = await Promise.allSettled([
+    fetch('https://overpass-api.de/api/interpreter',{ method:'POST', body:'data='+encodeURIComponent(qryForest) }),
+    fetch('https://overpass-api.de/api/interpreter',{ method:'POST', body:'data='+encodeURIComponent(qryTracks) })
+  ]);
+
+  let forests = [], tracks = [];
+
+  if(resF.status==='fulfilled' && resF.value.ok){
+    const d = await resF.value.json();
+    forests = d.elements
+      .filter(e => e.center || (e.lat && e.lon))
+      .map(e => e.center ? [e.center.lon, e.center.lat] : [e.lon, e.lat]);
+  }
+
+  if(resT.status==='fulfilled' && resT.value.ok){
+    const d = await resT.value.json();
+    tracks = d.elements
+      .filter(e => e.center || (e.lat && e.lon))
+      .map(e => e.center ? [e.center.lon, e.center.lat] : [e.lon, e.lat]);
+  }
+
+  // Wald hat Vorrang — Tracks nur als Ergänzung wenn Wald-Abdeckung dünn
+  // Mischverhältnis: erst Waldpunkte, dann Tracks auffüllen
+  const primary   = forests;
+  const secondary = tracks;
+
+  const targetDist = distKm / 4;
+
+  const wps = [0, 1, 2].map(i => {
+    const angle = (i * 120 + 30) % 360; // 30°, 150°, 270°
+
+    const best = (pool) => {
+      const cands = pool.filter(([fLo, fLa]) => {
+        const b    = brng(la, lo, fLa, fLo);
+        const dist = hav(la, lo, fLa, fLo);
+        const angleDiff = Math.abs(((b - angle + 540) % 360) - 180);
+        return angleDiff < 55 && dist > targetDist * 0.3 && dist < targetDist * 2.5;
+      });
+      if(!cands.length) return null;
+      cands.sort((a, b_) =>
+        Math.abs(hav(la,lo,a[1],a[0]) - targetDist) -
+        Math.abs(hav(la,lo,b_[1],b_[0]) - targetDist)
+      );
+      return cands[0];
+    };
+
+    // Wald bevorzugen, Feldweg als gleichwertiger Fallback
+    return best(primary) || best(secondary);
+  }).filter(Boolean);
+
+  return wps;
 }
 
+
+// ── ORS (Gravel) ──
 async function ors(profile, body){
   const res = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}/geojson`, {
     method:'POST',
-    headers:{ 'Authorization':S.key, 'Content-Type':'application/json' },
+    headers:{'Authorization':sanitize(S.keyORS),'Content-Type':'application/json'},
     body:JSON.stringify(body)
   });
   if(!res.ok){
     const e = await res.json().catch(()=>({}));
     const msg = e?.error?.message||'';
-    if(res.status===403) throw new Error('Ungültiger API Key. Bitte auf openrouteservice.org prüfen.');
-    if(res.status===429) throw new Error('API Limit erreicht. Kurz warten und erneut versuchen.');
+    if(res.status===403) throw new Error('Ungültiger ORS Key. Bitte auf openrouteservice.org prüfen.');
+    if(res.status===429) throw new Error('ORS Limit erreicht. Kurz warten und erneut versuchen.');
     throw new Error('Routenplanung fehlgeschlagen'+(msg?': '+msg:'.'));
   }
   const data = await res.json();
   if(!data.features?.length) throw new Error('Keine Route gefunden. Bitte anderen Startpunkt wählen.');
   return data.features[0];
+}
+
+async function roundtrip(coord, distKm){
+  if(S.bike==='road'){
+    // Bis zu 3 Versuche mit verschiedenen Seeds — verwirft Routen
+    // mit zu vielen "missing surface" Segmenten (Feld-/Schotterwege)
+    const MAX_SURFACE_TRIES = 2;
+    for(let t = 0; t < MAX_SURFACE_TRIES; t++){
+      const seed = t === 0 ? S.seed : rnd();
+      if(t > 0){
+        setStatus(`Prüfe Oberflächen… (Versuch ${t+1})`);
+        await new Promise(r => setTimeout(r, 1200)); // Rate-Limit Pause
+      }
+      const res = await graphhopper({
+        points:[coord],
+        profile:'bike',
+        algorithm:'round_trip',
+        'round_trip.distance': distKm*1000,
+        'round_trip.seed': seed,
+        points_encoded:false,
+        elevation:true,
+        details:['surface','road_class'],
+        custom_model: roadCustomModel()
+      });
+      const check = validateRoadSurface(res.ghPath||{});
+      if(check.ok) return res;
+      if(t === MAX_SURFACE_TRIES-1){
+        // Letzter Versuch war immer noch nicht sauber → Route trotzdem nehmen
+        // aber mit Flag markieren damit der User informiert wird
+        res.surfaceWarning = true;
+        res.surfaceDetail  = check.detail;
+        return res;
+      }
+    }
+  } else if(S.bike==='hardcore'){
+    return await hardcoreRoundtrip(coord, distKm);
+  } else {
+    // ORS — Gravel, Waldwege bevorzugen
+    return ors('cycling-mountain',{
+      coordinates:[coord],
+      options:{
+        avoid_features:['steps','ferries'],
+        profile_params:{ weightings:{ green:0.6, quiet:0.3 } },
+        round_trip:{ length:distKm*1000, points:5, seed:S.seed }
+      },
+      elevation:true
+    });
+  }
+}
+
+async function waypoints(coords){
+  if(S.bike==='road'){
+    return graphhopper({
+      points:coords,
+      profile:'bike',
+      points_encoded:false,
+      elevation:true,
+      details:['surface','road_class'],
+      custom_model: roadCustomModel()
+    });
+  } else if(S.bike==='hardcore'){
+    return graphhopper({
+      points:coords,
+      profile:'bike',
+      points_encoded:false,
+      elevation:true,
+      details:['surface'],
+      custom_model: hardcoreGravelCustomModel()
+    });
+  } else {
+    return ors('cycling-mountain',{
+      coordinates:coords,
+      options:{ avoid_features:['steps','ferries'], profile_params:{ weightings:{ green:0.6, quiet:0.3 } } },
+      elevation:true
+    });
+  }
 }
 
 // ──────────────────────────────────────────
@@ -510,21 +928,88 @@ async function ors(profile, body){
 async function planShade(){
   const [lo,la] = S.coord;
   const radius = Math.min(S.dist*180, 40000);
-  let forests = [];
-  try { forests = await queryForests(la,lo,radius); } catch{}
+  let shadePoints = [];
+  setStatus('Suche schattige Wege…');
 
-  if(forests.length>=2){
-    const wps = pickShadeWps(lo,la,forests,S.dist);
+  if(S.bike==='road'){
+    // Rennrad: NUR Parks — haben befestigte Wege, keine Wald-/Sandpfade
+    try { shadePoints = await queryParks(la,lo,radius); } catch{}
+  } else {
+    // Gravel/Hardcore: Wälder + Parks
+    try { shadePoints = await queryForests(la,lo,radius); } catch{}
+  }
+
+  if(shadePoints.length>=2){
+    const wps = pickShadeWps(lo,la,shadePoints,S.dist);
     if(wps.length>=2){
       try { return await waypoints([S.coord,...wps,S.coord]); } catch{}
     }
   }
-  // Fallback: normal roundtrip (with note)
+  // Fallback: normaler Rundkurs
   return roundtrip(S.coord, S.dist);
 }
 
+// Parks: Rennrad-sicher — wir fragen keine Park-Zentroide ab,
+// sondern asphaltierte Straßen IN DER NÄHE von Parks.
+// Grund: GH snappt Wegpunkte auf den nächsten routbaren Punkt —
+// Park-Zentroide landen oft auf Schotterwegen. Straßenknoten
+// garantieren Asphalt unabhängig vom roadCustomModel().
+async function queryParks(la,lo,rm){
+  // Schritt 1: Parks finden (als Referenzpunkte)
+  const qParks = `[out:json][timeout:12];(
+    way["leisure"="park"](around:${rm},${la},${lo});
+    way["landuse"="recreation_ground"](around:${rm},${la},${lo});
+    relation["leisure"="park"](around:${rm},${la},${lo});
+  );out center qt 40;`;
+
+  // Schritt 2: Asphaltierte Straßen in der Nähe
+  // Diese Knoten liegen garantiert auf fahrbarem Untergrund
+  const qRoads = `[out:json][timeout:12];(
+    way["highway"~"^(secondary|tertiary|residential|cycleway|unclassified)$"]
+       ["surface"~"^(asphalt|paved|concrete)$"](around:${rm},${la},${lo});
+    way["highway"~"^(secondary|tertiary|residential|cycleway)$"]
+       [!"surface"](around:${rm},${la},${lo});
+  );out center qt 150;`;
+
+  const [rP, rR] = await Promise.allSettled([
+    fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(qParks)}),
+    fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(qRoads)})
+  ]);
+
+  let parks = [], roads = [];
+
+  if(rP.status==='fulfilled' && rP.value.ok){
+    const d = await rP.value.json();
+    parks = d.elements.filter(e=>e.center||e.lat).map(e=>e.center?[e.center.lon,e.center.lat]:[e.lon,e.lat]);
+  }
+  if(rR.status==='fulfilled' && rR.value.ok){
+    const d = await rR.value.json();
+    roads = d.elements.filter(e=>e.center||e.lat).map(e=>e.center?[e.center.lon,e.center.lat]:[e.lon,e.lat]);
+  }
+
+  if(!roads.length) return parks; // Fallback auf Park-Zentroide wenn keine Straßen gefunden
+
+  // Pro Park-Punkt die nächstgelegene asphaltierte Straße wählen
+  // → Wegpunkt liegt auf sicherem Untergrund, ist aber trotzdem "nah am Park"
+  return parks.map(([pLo, pLa]) => {
+    let best = null, bestD = Infinity;
+    for(const [rLo, rLa] of roads){
+      const d = hav(pLa, pLo, rLa, rLo);
+      if(d < bestD){ bestD = d; best = [rLo, rLa]; }
+    }
+    return best || [pLo, pLa]; // Fallback auf Park-Zentroid
+  });
+}
+
+// Wälder + Parks: für Gravel/Hardcore
 async function queryForests(la,lo,rm){
-  const q = `[out:json][timeout:12];(way["landuse"="forest"](around:${rm},${la},${lo});way["natural"="wood"](around:${rm},${la},${lo});relation["landuse"="forest"](around:${rm},${la},${lo});relation["natural"="wood"](around:${rm},${la},${lo});way["leisure"="park"](around:${rm},${la},${lo}););out center qt 80;`;
+  const q = `[out:json][timeout:12];(
+    way["landuse"="forest"](around:${rm},${la},${lo});
+    way["natural"="wood"](around:${rm},${la},${lo});
+    relation["landuse"="forest"](around:${rm},${la},${lo});
+    relation["natural"="wood"](around:${rm},${la},${lo});
+    way["leisure"="park"](around:${rm},${la},${lo});
+  );out center qt 80;`;
   const res = await fetch('https://overpass-api.de/api/interpreter',{
     method:'POST', body:'data='+encodeURIComponent(q)
   });
@@ -550,7 +1035,7 @@ function pickShadeWps(cLo,cLa,forests,distKm){
 // ══════════════════════════════════════════
 // RENDER ROUTE
 // ══════════════════════════════════════════
-function routeColor(){ return S.hot?'#22c55e':S.bike==='road'?'#3b82f6':'#f97316'; }
+function routeColor(){ return S.hot?'#22c55e':S.bike==='road'?'#94a3b8':S.bike==='hardcore'?'#e11d48':'#4ade80'; }
 
 function renderRoute(feature){
   S.rg.clearLayers();
@@ -559,15 +1044,15 @@ function renderRoute(feature){
   const col = routeColor();
 
   // Shadow
-  L.polyline(lls,{color:'rgba(0,0,0,.4)',weight:9,lineCap:'round',lineJoin:'round'}).addTo(S.rg);
-  // Route
-  L.polyline(lls,{color:col,weight:5,opacity:.95,lineCap:'round',lineJoin:'round'}).addTo(S.rg);
+  L.polyline(lls,{color:'rgba(0,0,0,.25)',weight:7,lineCap:'round',lineJoin:'round'}).addTo(S.rg);
+  // Route — halbtransparent damit der Untergrund (Wegtyp) sichtbar bleibt
+  L.polyline(lls,{color:col,weight:5,opacity:0.55,lineCap:'round',lineJoin:'round'}).addTo(S.rg);
 
   S.map.fitBounds(L.latLngBounds(lls),{padding:[40,40]});
 
   // Legend
   q('legColor').style.background = col;
-  q('legLabel').textContent = S.hot?'Schattige Route':S.bike==='road'?'Rennrad Route':'Gravel Route';
+  q('legLabel').textContent = S.hot?'Schattige Route':S.bike==='road'?'Rennrad Route':S.bike==='hardcore'?'Hardcore Gravel':'Gravel Route';
   q('legend').classList.add('on');
 
   // Re-place start marker above route
@@ -586,18 +1071,21 @@ function showResults(f){
   const h=Math.floor(mins/60), m=mins%60;
   const timeStr = h ? `${h}h ${m.toString().padStart(2,'0')}m` : `${m} min`;
   let ascent=0; segs.forEach(s=>{ ascent+=s.ascent||0; });
-  const cls = S.hot?'shade':S.bike;
+  const cls = S.hot?'shade':(S.bike==='hardcore'?'hardcore':S.bike);
 
   ['sD','sE','sT'].forEach(id=>{ q(id).className='sv '+cls; });
   q('sD').textContent = distKm+' km';
   q('sE').textContent = ascent>0 ? Math.round(ascent)+' m' : '—';
   q('sT').textContent = timeStr;
   q('shadeTag').classList.toggle('on', S.hot);
+  const sw = q('surfWarnTag');
+  sw.classList.toggle('on', !!(f.surfaceWarning && S.bike==='road'));
 
   const coords = f.geometry.coordinates;
   if(coords[0].length>=3){ drawEle(coords); q('eleWrap').style.display='block'; }
   else q('eleWrap').style.display='none';
 
+  drawSurface(f.properties.surfBreakdown||null);
   q('results').classList.add('on');
 }
 
@@ -634,7 +1122,7 @@ function drawEle(coords){
 function exportGPX(){
   if(!S.route) return;
   const coords = S.route.geometry.coordinates;
-  const label = S.bike==='road'?'Rennrad':'Gravel';
+  const label = S.bike==='road'?'Rennrad':S.bike==='hardcore'?'Hardcore-Gravel':'Gravel';
   const dateStr = new Date().toISOString().slice(0,10);
   const name = `VeloRoute-${label}-${dateStr}`;
   const pts = coords.map(c=>{
@@ -650,7 +1138,7 @@ function exportGPX(){
   </metadata>
   <trk>
     <name>${name}</name>
-    <type>${S.bike==='road'?'cycling':'gravel_cycling'}</type>
+    <type>${S.bike==='road'?'cycling':S.bike==='hardcore'?'mountain_biking':'gravel_cycling'}</type>
     <trkseg>
 ${pts}
     </trkseg>
@@ -668,54 +1156,104 @@ ${pts}
 function newVariant(){ S.seed=rnd(); planRoute(); }
 
 // ══════════════════════════════════════════
-// EDIT MODE
+// SURFACE ANALYSIS
 // ══════════════════════════════════════════
-function enterEdit(){
-  S.mode='edit';
-  q('editBar').classList.add('on');
-  const coords = S.route.geometry.coordinates;
-  [.25,.5,.75].forEach(pct => {
-    const c = coords[Math.floor(pct*coords.length)];
-    addEditMark([c[1],c[0]]);
-  });
+const SURF_COLORS = {
+  asphalt:      '#64748b',
+  paved:        '#94a3b8',
+  concrete:     '#7c8fa8',
+  paving_stones:'#a8a29e',
+  gravel:       '#d97706',
+  fine_gravel:  '#f59e0b',
+  compacted:    '#b45309',
+  ground:       '#92400e',
+  dirt:         '#a16207',
+  sand:         '#fbbf24',
+  grass:        '#22c55e',
+  grass_paver:  '#4ade80',
+  mud:          '#78350f',
+  wood:         '#a3704e',
+  metal:        '#6b7280',
+  cobblestone:  '#9ca3af',
+  sett:         '#9ca3af',
+  unknown:      '#475569',
+  other:        '#475569',
+};
+
+const SURF_DE = {
+  asphalt:      'Asphalt',
+  paved:        'Befestigt',
+  concrete:     'Beton',
+  paving_stones:'Pflaster',
+  gravel:       'Schotter',
+  fine_gravel:  'Feiner Schotter',
+  compacted:    'Verdichtet',
+  ground:       'Boden (unbefestigt)',
+  dirt:         'Erde',
+  sand:         'Sand',
+  grass:        'Gras',
+  grass_paver:  'Rasengitter',
+  mud:          'Matsch',
+  wood:         'Holz',
+  metal:        'Metall',
+  cobblestone:  'Kopfsteinpflaster',
+  sett:         'Großpflaster',
+  unknown:      'Unbekannt',
+  other:        'Sonstiges',
+};
+
+function parseSurfaceDetails(path){
+  // GH details.surface = [[fromIdx, toIdx, "surface_name"], ...]
+  const segs = path.details?.surface;
+  const coords = path.points?.coordinates;
+  if(!segs || !coords) return null;
+
+  const distPerSurf = {};
+  for(const [from, to, surf] of segs){
+    let d = 0;
+    for(let i = from; i < to && i+1 < coords.length; i++){
+      d += hav(coords[i][1], coords[i][0], coords[i+1][1], coords[i+1][0]);
+    }
+    const key = (surf||'unknown').toLowerCase().replace(/ /g,'_');
+    distPerSurf[key] = (distPerSurf[key]||0) + d;
+  }
+  return distPerSurf;
 }
 
-function mkEditIcon(){
-  return L.divIcon({
-    html:`<div title="Ziehen · Doppelklick zum Entfernen" style="width:22px;height:22px;background:#f59e0b;border:3px solid #fff;border-radius:50%;cursor:grab;box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center">
-      <svg width="9" height="9" viewBox="0 0 9 9" fill="white"><circle cx="2.2" cy="2.2" r="1.1"/><circle cx="6.8" cy="2.2" r="1.1"/><circle cx="2.2" cy="6.8" r="1.1"/><circle cx="6.8" cy="6.8" r="1.1"/></svg></div>`,
-    className:'', iconSize:[22,22], iconAnchor:[11,11]
-  });
-}
+function drawSurface(breakdown){
+  const wrap = q('surfWrap');
+  if(!breakdown){ wrap.style.display='none'; return; }
 
-function addEditMark(latlng){
-  const mk = L.marker(latlng,{draggable:true,icon:mkEditIcon()}).addTo(S.map);
-  mk.on('dblclick', e=>{ L.DomEvent.stop(e); S.map.removeLayer(mk); S.em=S.em.filter(m=>m!==mk); });
-  S.em.push(mk);
-}
+  const total = Object.values(breakdown).reduce((a,b)=>a+b, 0);
+  if(total < 0.01){ wrap.style.display='none'; return; }
 
-function onMapClick(e){ if(S.mode==='edit') addEditMark([e.latlng.lat,e.latlng.lng]); }
+  // Sort by distance desc
+  const entries = Object.entries(breakdown).sort((a,b)=>b[1]-a[1]);
 
-async function applyEdit(){
-  loading(true);
-  try {
-    const wps = S.em.map(m=>{ const p=m.getLatLng(); return [p.lng,p.lat]; });
-    const feature = await waypoints([S.coord,...wps,S.coord]);
-    S.route=feature;
-    renderRoute(feature);
-    showResults(feature);
-    exitEdit();
-  } catch(e){
-    err('routeErr','Bearbeitung fehlgeschlagen: '+(e.message||'Fehler'));
-    exitEdit();
-  } finally { loading(false); }
-}
+  // Bar
+  const bar = q('surfBar');
+  bar.innerHTML = entries.map(([k,d])=>{
+    const pct = (d/total*100).toFixed(1);
+    const col = SURF_COLORS[k]||SURF_COLORS.other;
+    return `<div class="surf-seg" style="width:${pct}%;background:${col}" title="${SURF_DE[k]||k}: ${pct}%"></div>`;
+  }).join('');
 
-function exitEdit(){
-  S.mode='review';
-  q('editBar').classList.remove('on');
-  S.em.forEach(m=>S.map.removeLayer(m));
-  S.em=[];
+  // List
+  const list = q('surfList');
+  list.innerHTML = entries.map(([k,d])=>{
+    const pct = (d/total*100).toFixed(0);
+    const km  = d.toFixed(1);
+    const col = SURF_COLORS[k]||SURF_COLORS.other;
+    const lbl = SURF_DE[k]||k;
+    return `<div class="surf-item">
+      <div class="surf-dot" style="background:${col}"></div>
+      <div class="surf-name">${lbl}</div>
+      <div class="surf-pct">${pct}%</div>
+      <div class="surf-km">${km} km</div>
+    </div>`;
+  }).join('');
+
+  wrap.style.display = 'block';
 }
 
 // ══════════════════════════════════════════
@@ -735,13 +1273,57 @@ function brng(la1,lo1,la2,lo2){
 }
 
 // ══════════════════════════════════════════
+// BACKTRACK REMOVAL
+// Erkennt kurze Out-and-Back-Nadeln und entfernt sie.
+// Logik: Wenn Punkte i und j nah beieinander liegen UND
+// der Weg i→…→j kürzer als MAX_SPIKE_KM ist,
+// handelt es sich um einen sinnlosen Abstecher.
+// ══════════════════════════════════════════
+function removeBacktracks(coords){
+  const SNAP_KM   = 0.07;  // 70 m — gilt als "gleicher Ort"
+  const MAX_SPIKE = 1.8;   // Abstecher bis 1,8 km werden entfernt
+  const LOOK      = 100;   // Suchfenster (Performance)
+
+  let pts = coords.slice();
+  let changed = true;
+  while(changed){
+    changed = false;
+    outer:
+    for(let i = 0; i < pts.length - 3; i++){
+      for(let j = i + 3; j < Math.min(i + LOOK, pts.length); j++){
+        if(hav(pts[i][1],pts[i][0], pts[j][1],pts[j][0]) < SNAP_KM){
+          let len = 0;
+          for(let k = i; k < j; k++){
+            len += hav(pts[k][1],pts[k][0], pts[k+1][1],pts[k+1][0]);
+            if(len > MAX_SPIKE) break;
+          }
+          if(len <= MAX_SPIKE){
+            pts.splice(i + 1, j - i);
+            changed = true;
+            break outer;
+          }
+        }
+      }
+    }
+  }
+  return pts;
+}
+
+function cleanRoute(feature){
+  feature.geometry.coordinates = removeBacktracks(feature.geometry.coordinates);
+  return feature;
+}
+
+
+// ══════════════════════════════════════════
 // UI HELPERS
 // ══════════════════════════════════════════
-function loading(on){
-  q('genBtn').disabled=on;
-  q('spin').style.display=on?'block':'none';
-  q('genTxt').textContent=on?'Berechne Route…':'ROUTE PLANEN';
+function loading(on, msg){
+  q('genBtn').disabled = on;
+  q('spin').style.display = on ? 'block' : 'none';
+  q('genTxt').textContent = on ? (msg||'Berechne Route…') : 'ROUTE PLANEN';
 }
+function setStatus(msg){ loading(true, msg); }
 function err(id,msg){ const e=q(id); e.textContent=msg; e.classList.toggle('on',!!msg); }
 </script>
 </body>
