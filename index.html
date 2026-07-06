@@ -676,7 +676,7 @@ function surfKey(tags){
 // damit die Indizes zur bereinigten Geometrie passen.
 function parseBRouterMessages(messages, coords){
   const rows = msgRows(messages);
-  const breakdown = {}, segs = [];
+  const breakdown = {}, segs = [], riskSegs = [];
   let prevIdx = 0;
   for(const row of rows){
     const key = surfKey(row.tags);
@@ -686,12 +686,22 @@ function parseBRouterMessages(messages, coords){
       const last = segs[segs.length - 1];
       if(last && last.key === key && last.to === prevIdx) last.to = idx;
       else segs.push({ from: prevIdx, to: idx, key });
+
+      // Risiko-Outline: nur nicht-sichere Stufen bekommen eine Farbe.
+      // Gleiche Merge-Bedingung (to === prevIdx) wie oben, damit eine
+      // safe-Lücke die farbige Linie sauber unterbricht.
+      const level = rowRisk(row.tags).level;
+      if(RISK[level].color){
+        const lr = riskSegs[riskSegs.length - 1];
+        if(lr && lr.level === level && lr.to === prevIdx) lr.to = idx;
+        else riskSegs.push({ from: prevIdx, to: idx, level });
+      }
     }
     prevIdx = Math.max(prevIdx, idx);
   }
   if(prevIdx < coords.length - 1 && segs.length)
     segs[segs.length - 1].to = coords.length - 1;
-  return { breakdown, segs, rows };
+  return { breakdown, segs, riskSegs, rows };
 }
 
 // Message-Koordinate (Mikrograd) → Index in der Track-Geometrie.
@@ -716,22 +726,65 @@ function matchIdx(coords, lonM, latM, startIdx){
 // SURFACE VALIDATOR (Rennrad, Post-Processing)
 // Arbeitet direkt auf den WayTags der BRouter-Segmente.
 // ══════════════════════════════════════════
+//
+// RISIKO-STUFEN — Single-Source-of-Truth für Validator UND Karte.
+// Farbe (Karten-Outline) und Gewicht (Anteil an der Risiko-Summe)
+// bewusst GETRENNT: z. B. „caution" ist gelb sichtbar, zählt aber
+// nur mit 0.05 — in DE sind viele Nebenstraßen ungetaggt, würden
+// sonst die 5-%-Warnung dauernd auslösen. color=null → keine Outline.
+const RISK = {
+  safe:    { w: 0.05, color: null,      label: 'unkritisch' },
+  caution: { w: 0.05, color: null,      label: 'ungetaggt' },              // keine Outline
+  risky:   { w: 0.70, color: '#f97316', label: 'ungetaggte Hauptstraße' }, // orange
+  bad:     { w: 0.90, color: '#dc2626', label: 'unbefestigt' },            // rot
+  severe:  { w: 1.00, color: '#7f1d1d', label: 'grober Untergrund' },      // dunkelrot
+};
+
+const _SURF_PAVED  = new Set(['asphalt','paved','concrete','paving_stones']);
+const _SURF_SEVERE = new Set(['mud']);
+const _SURF_BAD    = new Set(['gravel','fine_gravel','ground','dirt','earth','sand','grass','compacted','unpaved','pebblestone']);
+const _HW_HARD     = new Set(['track','path','bridleway','footway','steps']);
+const _HW_RISKY    = new Set(['service','unclassified']);
+
+// Klassifiziert EIN BRouter-Segment anhand seiner WayTags.
+// Rückgabe:
+//   level  – Schlüssel in RISK (safe|caution|risky|bad|severe)
+//   hard   – true = unbefestigter Wegtyp → Route gilt als „nicht perfekt"
+//   reason – Freitext für Tooltip/Debug. NIE zum Verzweigen benutzen,
+//            sonst zieht die verstreute Logik wieder ein — immer gegen
+//            level/hard prüfen.
+function rowRisk(tags){
+  const s  = (tags.surface || '').toLowerCase().replace(/ /g, '_');
+  const hw = (tags.highway || '').toLowerCase();
+
+  // 1) Expliziter Belag schlägt alles
+  if(_SURF_SEVERE.has(s)) return { level:'severe', hard:false, reason:s };
+  if(_SURF_BAD.has(s))    return { level:'bad',    hard:false, reason:s };
+  if(_SURF_PAVED.has(s))  return { level:'safe',   hard:false, reason:s };
+
+  // 2) Unbefestigter Wegtyp ohne Belag-Tag → hart (kippt die Route)
+  if(_HW_HARD.has(hw))    return { level:'bad', hard:true, reason:hw+'_without_surface' };
+
+  // 3) Kein Belag-Tag: ungewisse größere Straße vs. gewöhnliche Straße
+  if(!s){
+    if(_HW_RISKY.has(hw)) return { level:'risky',   hard:false, reason:hw+'_without_surface' };
+    if(hw)               return { level:'caution', hard:false, reason:hw+'_without_surface' };
+    return { level:'caution', hard:false, reason:'no_tags' };
+  }
+
+  // 4) Getaggter, aber unbekannter Belag (wood, cobblestone, …) → mild
+  return { level:'caution', hard:false, reason:'surface_'+s };
+}
+
 function validateRoadSurface(rows){
   if(!rows.length) return { ok: true, riskPct: 0 };
-
-  const PAVED = new Set(['asphalt','paved','concrete','paving_stones']);
-  const BAD   = new Set(['gravel','fine_gravel','ground','dirt','earth','sand','grass','mud','compacted','unpaved','pebblestone']);
-  const HARD  = new Set(['track','path','bridleway','footway','steps']);
-  const RISKY = new Set(['service','unclassified']);
 
   let total = 0, risk = 0, hard = false, hardCls = '';
   for(const r of rows){
     const d = r.distM; total += d;
-    const s  = (r.tags.surface || '').toLowerCase();
-    const hw = r.tags.highway || '';
-    if(HARD.has(hw) && !PAVED.has(s)){ hard = true; hardCls = hw; risk += d; continue; }
-    if(BAD.has(s)){ risk += d * 0.9; continue; }
-    if(!s){ risk += RISKY.has(hw) ? d * 0.7 : d * 0.05; }
+    const rk = rowRisk(r.tags);
+    if(rk.hard){ hard = true; hardCls = (r.tags.highway || '').toLowerCase(); }
+    risk += d * RISK[rk.level].w;
   }
   const pct = total > 0 ? risk / total * 100 : 0;
   const MAX_RISK_PCT = 5;
@@ -759,20 +812,30 @@ const OVERPASS_URLS = [
 ];
 const opCache = new Map();
 
+const OVERPASS_TIMEOUT_MS = 15000; // hartes Client-Limit pro Mirror-Versuch
+
 async function overpass(query){
   if(opCache.has(query)) return opCache.get(query);
   let lastErr = null;
   for(const url of OVERPASS_URLS){
+    // Ohne Abbruch wartet fetch unbegrenzt, wenn Overpass die Anfrage nur
+    // in die Warteschlange stellt (das serverseitige [timeout:N] greift erst,
+    // wenn wirklich gerechnet wird). AbortController deckelt das hart und lässt
+    // uns schnell auf den Mirror bzw. den geometrischen Fallback ausweichen.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), OVERPASS_TIMEOUT_MS);
     try {
-      const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(query) });
+      const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(query), signal: ctrl.signal });
       if(!r.ok) throw new Error('HTTP ' + r.status);
       const d = await r.json();
       if(opCache.size > 24) opCache.delete(opCache.keys().next().value);
       opCache.set(query, d);
       return d;
     } catch(e){
-      lastErr = e;
-      console.warn('Overpass-Fehler bei', url, '—', e.message);
+      lastErr = (e.name === 'AbortError') ? new Error(`Overpass-Timeout (${OVERPASS_TIMEOUT_MS/1000}s)`) : e;
+      console.warn('Overpass-Fehler bei', url, '—', lastErr.message);
+    } finally {
+      clearTimeout(timer);
     }
   }
   throw lastErr || new Error('Overpass nicht erreichbar');
@@ -1225,11 +1288,18 @@ async function planRoute(){
       note('viaNote', `⚠️ Zieldistanz für die Zwischenziele zu klein — Route wird ca. ${effTarget} km lang.`);
     }
 
-    // ── Distanz-kontrollierte Retry-Schleife ──
-    const MAX_OVER_KM = 10;
-    const MAX_TRIES   = 2;
+    // ── Distanz-kontrollierte Retry-Schleife (symmetrisch) ──
+    // Akzeptanz-Band um effTarget: nicht zu lang (+MAX_OVER_KM) UND nicht
+    // zu kurz (>= UNDER_FACTOR·effTarget). Liegt actualKm außerhalb, wird
+    // hintDist proportional korrigiert — nach OBEN bei Untermaß, nach UNTEN
+    // bei Übermaß (früher nur abwärts). Von allen Versuchen wird die Route
+    // mit der kleinsten Abweichung behalten, nicht einfach die letzte.
+    const MAX_OVER_KM  = 10;    // Toleranz nach oben (km)
+    const UNDER_FACTOR = 0.90;  // Toleranz nach unten (Anteil des Ziels)
+    const MAX_TRIES    = 3;
     let hintDist = effTarget;
     let feature;
+    let best = null;            // { feature, dev, actualKm } — kleinste Abweichung
 
     for(let attempt = 0; attempt < MAX_TRIES; attempt++){
       if(attempt > 0) await new Promise(r => setTimeout(r, 600));
@@ -1239,15 +1309,25 @@ async function planRoute(){
       feature = finishRoute(raw, viaC);
 
       const actualKm = feature.properties.summary.distance / 1000;
-      if(actualKm <= effTarget + MAX_OVER_KM) break;
+
+      // Beste bisherige Route merken (kleinste absolute Abweichung vom Ziel)
+      const dev = Math.abs(actualKm - effTarget);
+      if(!best || dev < best.dev) best = { feature, dev, actualKm };
+
+      // Im Band → fertig
+      if(actualKm >= effTarget * UNDER_FACTOR && actualKm <= effTarget + MAX_OVER_KM) break;
 
       // Bei 3 Pflichtpunkten existieren keine generierten Wegpunkte mehr → Retry sinnlos
       if(viaC.length >= 3) break;
 
+      // Symmetrische Korrektur: actualKm < Ziel → hoch, actualKm > Ziel → runter
       const scaled = Math.max(10, minKm, hintDist * (effTarget / actualKm));
       if(Math.abs(scaled - hintDist) < 1) break;
       hintDist = scaled;
     }
+
+    // Band evtl. nie exakt getroffen → beste Näherung statt letztem Versuch
+    feature = best.feature;
 
     S.route = feature;
     renderRoute(feature);
@@ -1268,6 +1348,7 @@ function finishRoute(feature, viaC){
     const parsed = parseBRouterMessages(feature._messages, feature.geometry.coordinates);
     feature.properties.surfBreakdown = parsed.breakdown;
     feature.properties.surfSegs = parsed.segs;
+    feature.properties.riskSegs = parsed.riskSegs;
   }
   return feature;
 }
@@ -1285,7 +1366,12 @@ async function roundtrip(coord, distKm, vias = []){
     if(budget <= 0) return [];
     try {
       if(S.bike === 'road'){
-        const radius = Math.min(Math.max(10000, Math.ceil(distKm * 350 / 5000) * 5000), 60000);
+        // Fetch-Radius an der STABILEN Zieldistanz (Slider) festmachen, nicht an
+        // hintDist. So bleibt der Overpass-Query-String über alle Distanz-Retries
+        // identisch → Cache-Hit → Retries laden kein Overpass mehr nach, es wird
+        // nur neu gescored/platziert. (targetDist skaliert weiter mit distKm.)
+        const stableKm = S.dist;
+        const radius = Math.min(Math.max(10000, Math.ceil(stableKm * 350 / 5000) * 5000), 60000);
         setStatus('Suche Rennrad-Straßen…');
         return await queryRoadWps(la, lo, radius, distKm, strict, budget, vias);
       }
@@ -1448,11 +1534,16 @@ async function queryRoadWps(la, lo, rm, distKm, strictMode = false, budget = 3, 
     way["highway"="primary"]["surface"~"^(asphalt|paved|concrete)$"](around:${rm},${la},${lo});
   );out center qt 300;`;
 
+  // residential ist die dichteste Straßenklasse → ein Fern-Scan darüber ist der
+  // Hauptgrund für minutenlange Overpass-Abfragen. residential ist ohnehin nur
+  // Fallback-Pool (Qualitätsbonus 0; Rennrad bevorzugt secondary/tertiary), daher
+  // auf einen Innenradius begrenzen. Im Fernbereich bleiben secondary/tertiary.
+  const rmRes = Math.min(rm, 15000);
   const qB = `[out:json][timeout:20];(
     way["highway"~"^(secondary|tertiary)$"][!"surface"](around:${rm},${la},${lo});
     way["highway"="cycleway"][!"surface"](around:${rm},${la},${lo});
-    way["highway"="residential"]["surface"~"^(asphalt|paved|concrete)$"](around:${rm},${la},${lo});
-    way["highway"="residential"][!"surface"](around:${rm},${la},${lo});
+    way["highway"="residential"]["surface"~"^(asphalt|paved|concrete)$"](around:${rmRes},${la},${lo});
+    way["highway"="residential"][!"surface"](around:${rmRes},${la},${lo});
   );out center qt 200;`;
 
   const queries = strictMode ? [qA] : [qA, qB];
@@ -1533,7 +1624,7 @@ async function queryRoadWps(la, lo, rm, distKm, strictMode = false, budget = 3, 
   const wps = [];
 
   for(const { targetAngle, scored } of perAngle){
-    if(!scored.length) continue;
+    // Idealpunkt dieser Richtung am Zielradius — auch geometrischer Fallback
     const ideal = destPoint(la, lo, targetDist, targetAngle);
 
     const finals = scored.map(c => {
@@ -1556,7 +1647,19 @@ async function queryRoadWps(la, lo, rm, distKm, strictMode = false, budget = 3, 
       );
       if(!tooClose){ chosen = cand.coord; break; }
     }
-    if(!chosen && finals.length > 0) chosen = finals[0].coord;
+
+    // KEIN Dropout mehr: liefert diese Richtung keinen (separierten) Overpass-
+    // Kandidaten, wird der geometrische Idealpunkt am Zielradius gesetzt.
+    // BRouter snappt ihn auf den nächsten routbaren Weg — die Schleife bleibt
+    // gleichmäßig über alle Zielwinkel verteilt statt einseitig zu kollabieren.
+    // Die Idealpunkte liegen winkelmäßig weit auseinander und sind damit von
+    // Natur aus separiert; nur Kollisionen mit Vias werden noch geprüft.
+    if(!chosen){
+      const clashVia = avoid.some(([wLo, wLa]) =>
+        hav(wLa, wLo, ideal[1], ideal[0]) < MIN_WP_SEPARATION_KM
+      );
+      chosen = clashVia ? (finals[0] ? finals[0].coord : null) : ideal;
+    }
     if(chosen) wps.push(chosen);
   }
 
@@ -1736,8 +1839,23 @@ function renderRoute(feature, fit = true){
   const lls = coords.map(c=>[c[1],c[0]]);
   const col = routeColor();
   const segs = feature.properties.surfSegs || [];
+  const riskSegs = feature.properties.riskSegs || [];
 
   L.polyline(lls,{color:'rgba(0,0,0,.25)',weight:7,lineCap:'round',lineJoin:'round'}).addTo(S.rg);
+
+  // Risiko-Outline: breiter Farb-Halo UNTER der Belag-Farbe, nur im
+  // Rennrad-Belag-Modus. Belag-Info (dünnere Linie oben) bleibt lesbar,
+  // riskante Abschnitte leuchten je Stufe gelb/orange/rot/dunkelrot heraus.
+  if(S.colorSurf && S.bike === 'road' && riskSegs.length){
+    for(const rs of riskSegs){
+      const slice = lls.slice(rs.from, rs.to + 1);
+      if(slice.length < 2) continue;
+      L.polyline(slice,{
+        color: RISK[rs.level].color, weight:11, opacity:.9,
+        lineCap:'round', lineJoin:'round'
+      }).addTo(S.rg);
+    }
+  }
 
   if(S.colorSurf && segs.length){
     // Belag-Modus: jedes Segment in seiner Untergrund-Farbe
